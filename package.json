@@ -1,0 +1,13 @@
+{
+  "name": "fix-the-hospital",
+  "version": "1.0.0",
+  "description": "Multiplayer classroom simulation: decide whether, and how, to deploy an AI system at Penn General.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
