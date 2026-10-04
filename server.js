@@ -7,53 +7,63 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { ROLE_ORDER: ROLES, ROLES: ROLE_INFO, PROBLEMS, PACKAGES, MODS } = require('./public/content.js');
+const {
+  ROLE_ORDER: ROLES, ROLES: ROLE_INFO, GROUPS, GROUP_ORDER, PROBLEMS, PACKAGES, PACKAGE_ORDER, MODULES, TERMS, PASS, TOTAL_VOTES, dealCost,
+} = require('./public/content.js');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC = path.join(__dirname, 'public');
 const ROOM_TTL_MS = 12 * 60 * 60 * 1000;
 
 const PROBLEM_IDS = PROBLEMS.map((p) => p.id);
-const PACKAGE_IDS = Object.keys(PACKAGES);
-const MOD_IDS = MODS.map((m) => m.id);
+const PACKAGE_IDS = [...PACKAGE_ORDER, 'keep'];
+const MODULE_IDS = MODULES.map((m) => m.id);
+const TERM_IDS = TERMS.map((t) => t.id);
 const TIERS = ['critical', 'desirable', 'lower'];
 const TOP_PICKS = 3;
-const DANGER_MEDS = ['kcl', 'amox'];
+const DANGER_MEDS = ['supp', 'lact', 'insulin'];
+const DOSES = ['continue', 'reduce', 'hold'];
+const VOTING_GROUPS = GROUP_ORDER.filter((g) => GROUPS[g].votes > 0);
+const SECRET_OWNER = {};
+for (const role of ROLES) for (const sec of ROLE_INFO[role].secrets) SECRET_OWNER[sec.id] = role;
+const groupOf = (player) => (player && player.role ? ROLE_INFO[player.role].group : null);
+const isVoter = (player) => !!player && !!player.role && GROUPS[groupOf(player)].votes > 0;
 
 // The host walks through these in order. `timer` is seconds; `auto` advances when it expires.
-// Phase timings follow the whiteboard: 4 / 10 / 6 / 20 / 2-3 / 2-3 minutes.
+// Every part of every phase has its own countdown. Phase totals follow the plan: 4 / 10 / 6 / 20 / 3 / 3 minutes.
 const STEPS = [
   { id: 'lobby', phase: 0 },
-  { id: 'p1_intro', phase: 1 },
-  { id: 'p1_ehr', phase: 1, timer: 150, auto: true },
-  { id: 'p1_log', phase: 1, timer: 90 },
-  { id: 'p2_intra', phase: 2, timer: 240 },
-  { id: 'p2_hospital', phase: 2, timer: 360 },
-  { id: 'p3_handshake', phase: 3 },
-  { id: 'p3_packages', phase: 3, timer: 300 },
-  { id: 'p4_intra', phase: 4, timer: 420 },
-  { id: 'p4_inter', phase: 4, timer: 780 },
-  { id: 'p5_vote', phase: 5, timer: 150 },
-  { id: 'p6_decision', phase: 6 },
-  { id: 'p6_sim', phase: 6 },
-  { id: 'p6_outcome', phase: 6 },
-  { id: 'p6_reflect', phase: 6, timer: 120 },
+  { id: 'p1_intro', phase: 1, timer: 45 }, // read your task (not counted in the 4 minutes)
+  { id: 'p1_ehr', phase: 1, timer: 240, auto: true }, // 1 quiet minute, 3 minutes of alert storm, crash
+  { id: 'p2_notes', phase: 2, timer: 180 }, // minutes 0-3: everyone logs what they hit or saw
+  { id: 'p2_merge', phase: 2, timer: 300 }, // minutes 3-8: merge into one list, star what matters
+  { id: 'p2_top3', phase: 2, timer: 120 }, // minutes 8-10: mark the must-fix problems, pick a spokesperson
+  { id: 'p3_hospital', phase: 3, timer: 120 }, // hospital spokesperson presents
+  { id: 'p3_pitch', phase: 3, timer: 240 }, // vendor: four packages, one minute each
+  { id: 'p4_intra', phase: 4, timer: 480 }, // inside your team
+  { id: 'p4_inter', phase: 4, timer: 720 }, // across teams
+  { id: 'p5_vote', phase: 5, timer: 180 },
+  { id: 'p6_decision', phase: 6, timer: 30 },
+  { id: 'p6_sim', phase: 6, timer: 60 },
+  { id: 'p6_outcome', phase: 6, timer: 45 },
+  { id: 'p6_reflect', phase: 6, timer: 60 },
   { id: 'debrief', phase: 7 },
   { id: 'reveal_cards', phase: 7 },
   { id: 'reveal_point', phase: 7 },
 ];
 const stepIndex = (id) => STEPS.findIndex((s) => s.id === id);
 const DECISION_INDEX = stepIndex('p6_decision');
+const SHARE_FROM = stepIndex('p2_notes');
 
 // Which steps accept which player submissions.
 const OPEN = {
-  ehr: ['p1_ehr', 'p1_log'],
-  report: ['p1_log', 'p2_intra'],
-  top: ['p2_intra'],
+  ehr: ['p1_ehr', 'p2_notes'],
+  report: ['p2_notes', 'p2_merge'],
+  top: ['p2_merge', 'p2_top3'],
   straw: ['p4_intra', 'p4_inter'],
   final: ['p5_vote'],
   reflect: ['p6_reflect', 'debrief', 'reveal_cards', 'reveal_point'],
-  tier: ['p2_hospital', 'p3_handshake'],
+  tier: ['p2_top3', 'p3_hospital'],
 };
 
 const rooms = new Map();
@@ -78,13 +88,14 @@ function newRoom() {
     timerEnd: null,
     autoTimer: null,
     players: new Map(), // secret id -> player
-    ehr: new Map(), // id -> { n, critMs, given }
+    ehr: new Map(), // id -> { n, critMs, given, dose }
     reports: new Map(), // id -> { problems, other }
     top: new Map(), // id -> [problem ids]
     tierOverride: {}, // problem id -> tier, set by the host
-    straw: new Map(), // id -> { pkg, mods }
-    final: new Map(), // id -> { pkg, mods }
-    reflections: new Map(), // id -> { rating, think, missing, changes }
+    straw: new Map(), // id -> { pkg, modules, terms }
+    final: new Map(), // id -> { pkg, modules, terms }
+    reflections: new Map(), // id -> { worst, fixed, surprised, gaveup, learned }
+    shared: new Map(), // secret id -> { role, at }: facts and offers a team has published to the room
     reps: {}, // role -> player id
     clients: new Set(),
     flush: null,
@@ -134,11 +145,28 @@ function roleCounts(room) {
   return counts;
 }
 
-function leastFilledRole(room) {
-  const counts = roleCounts(room);
-  const min = Math.min(...ROLES.map((r) => counts[r]));
-  const options = ROLES.filter((r) => counts[r] === min);
+// Random assignment follows the facilitator pack's seat plan: the role furthest below its share is filled next.
+function seatPick(room, counts) {
+  const c = counts || roleCounts(room);
+  const ratio = (r) => c[r] / ROLE_INFO[r].target;
+  const min = Math.min(...ROLES.map(ratio));
+  const options = ROLES.filter((r) => ratio(r) <= min + 1e-9);
   return options[crypto.randomInt(options.length)];
+}
+
+// Host button: deal every player a seat from the plan, in random order.
+function shuffleRoles(room) {
+  const players = [...room.players.values()];
+  for (let i = players.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [players[i], players[j]] = [players[j], players[i]];
+  }
+  const counts = Object.fromEntries(ROLES.map((r) => [r, 0]));
+  for (const p of players) {
+    p.role = seatPick(room, counts);
+    counts[p.role]++;
+  }
+  room.reps = {};
 }
 
 // Each role team has one representative who speaks for it in hospital-wide negotiation.
@@ -177,11 +205,11 @@ function problemBoard(room) {
   };
   for (const [pid, report] of room.reports) {
     const p = room.players.get(pid);
-    if (p && p.role) for (const id of report.problems) bump(board[id], 'reports', p.role);
+    if (isVoter(p)) for (const id of report.problems) bump(board[id], 'reports', p.role);
   }
   for (const [pid, picks] of room.top) {
     const p = room.players.get(pid);
-    if (p && p.role) for (const id of picks) bump(board[id], 'top', p.role);
+    if (isVoter(p)) for (const id of picks) bump(board[id], 'top', p.role);
   }
   const ranked = [...PROBLEM_IDS].sort(
     (a, b) => board[b].top - board[a].top || board[b].reports - board[a].reports || PROBLEM_IDS.indexOf(a) - PROBLEM_IDS.indexOf(b)
@@ -193,34 +221,100 @@ function problemBoard(room) {
   return board;
 }
 
+// Each group votes as a block: its package is the one most of its members chose.
+// Executives carry 2 votes, the other five hospital groups 1 each, vendors none.
+// A group "supports" a module or term when at least half of its members ticked it.
 function tallyBallots(room, ballots) {
   const zero = () => Object.fromEntries(PACKAGE_IDS.map((id) => [id, 0]));
-  const counts = zero();
-  const byRole = {};
-  const mods = Object.fromEntries(MOD_IDS.map((id) => [id, 0]));
-  let total = 0;
+  const members = Object.fromEntries(VOTING_GROUPS.map((g) => [g, []]));
   for (const [pid, ballot] of ballots) {
     const p = room.players.get(pid);
-    if (!p || !p.role) continue;
-    counts[ballot.pkg]++;
-    total++;
-    byRole[p.role] = byRole[p.role] || zero();
-    byRole[p.role][ballot.pkg]++;
-    for (const id of ballot.mods) mods[id]++;
+    if (isVoter(p)) members[groupOf(p)].push({ p, ballot });
   }
-  return { counts, byRole, mods, total };
+  const cheapest = (ids) => [...ids].sort((x, y) => PACKAGES[x].price - PACKAGES[y].price)[0];
+  const counts = zero();
+  const picks = {};
+  const split = {};
+  const modules = Object.fromEntries(MODULE_IDS.map((id) => [id, 0]));
+  const terms = Object.fromEntries(TERM_IDS.map((id) => [id, 0]));
+  const moduleGroups = Object.fromEntries(MODULE_IDS.map((id) => [id, []]));
+  const termGroups = Object.fromEntries(TERM_IDS.map((id) => [id, []]));
+  let total = 0;
+  let present = 0;
+  for (const g of VOTING_GROUPS) {
+    const list = members[g];
+    split[g] = zero();
+    picks[g] = null;
+    if (!list.length) continue;
+    total += list.length;
+    present += GROUPS[g].votes;
+    for (const { ballot } of list) split[g][ballot.pkg]++;
+    const best = Math.max(...PACKAGE_IDS.map((id) => split[g][id]));
+    const leaders = PACKAGE_IDS.filter((id) => split[g][id] === best);
+    // A split team follows its representative, otherwise the cheaper option.
+    const rep = list.find(({ p, ballot }) => room.reps[p.role] === p.id && leaders.includes(ballot.pkg));
+    picks[g] = leaders.length === 1 ? leaders[0] : rep ? rep.ballot.pkg : cheapest(leaders);
+    counts[picks[g]] += GROUPS[g].votes;
+    for (const id of MODULE_IDS) {
+      if (list.filter(({ ballot }) => ballot.modules.includes(id)).length * 2 >= list.length) {
+        modules[id] += GROUPS[g].votes;
+        moduleGroups[id].push(g);
+      }
+    }
+    for (const id of TERM_IDS) {
+      if (list.filter(({ ballot }) => ballot.terms.includes(id)).length * 2 >= list.length) {
+        terms[id] += GROUPS[g].votes;
+        termGroups[id].push(g);
+      }
+    }
+  }
+  // With every group seated these are 5 and 4 of 7; they scale down for small test rooms.
+  const need = present ? Math.ceil((present * PASS) / TOTAL_VOTES) : PASS;
+  const majority = Math.floor(present / 2) + 1;
+  return { counts, picks, split, modules, terms, moduleGroups, termGroups, total, present, need, majority };
 }
 
-// Plurality picks the package; ties go to the cheaper option. A term is adopted with majority support.
+const termOffered = (room, term) => !term.gate || room.shared.has(term.gate);
+
+// Turn a set of ballots into one deal: package, adopted terms, modules bought while the money lasts.
+function resolve(room, ballots) {
+  const tally = tallyBallots(room, ballots);
+  if (!tally.present) return { pkg: 'keep', passed: false, byExec: false, empty: true, modules: [], dropped: [], terms: [], cost: dealCost({ pkg: 'keep' }), tally };
+  const ranked = [...PACKAGE_IDS].sort((x, y) => tally.counts[y] - tally.counts[x] || PACKAGES[x].price - PACKAGES[y].price);
+  let pkg = ranked[0];
+  const passed = tally.counts[pkg] >= tally.need;
+  let byExec = false;
+  if (!passed && tally.picks.exec) {
+    pkg = tally.picks.exec; // no deal reached the bar: the executives decide
+    byExec = true;
+  }
+  let terms = TERMS.filter(
+    (t) => t.applies.includes(pkg) && termOffered(room, t) && tally.terms[t.id] >= tally.majority && (!t.needs || tally.termGroups[t.id].includes(t.needs))
+  ).map((t) => t.id);
+  // Modules are bought in order of support until the cap is reached.
+  const modules = [];
+  const dropped = [];
+  if (pkg === 'd') {
+    const wanted = MODULES.filter((m) => tally.modules[m.id] >= tally.majority).sort(
+      (x, y) => tally.modules[y.id] - tally.modules[x.id] || x.price - y.price
+    );
+    for (const m of wanted) {
+      const cost = dealCost({ pkg, modules: [...modules, m.id], terms });
+      if (cost.total <= cost.cap + 1e-9) modules.push(m.id);
+      else dropped.push(m.id);
+    }
+  }
+  const trained = pkg === 'c' || modules.includes('training');
+  terms = terms.filter((id) => {
+    const t = TERMS.find((x) => x.id === id);
+    return !t.needsModule || trained;
+  });
+  return { pkg, passed, byExec, empty: false, votes: tally.counts[pkg], modules, dropped, terms, cost: dealCost({ pkg, modules, terms }), tally };
+}
+
 function decide(room) {
-  let tally = tallyBallots(room, room.final);
-  if (tally.total === 0) tally = tallyBallots(room, room.straw);
-  if (tally.total === 0) return { pkg: 'keep', mods: [], tie: false, votes: 0 };
-  const best = Math.max(...PACKAGE_IDS.map((id) => tally.counts[id]));
-  const leaders = PACKAGE_IDS.filter((id) => tally.counts[id] === best);
-  const pkg = leaders.sort((a, b) => PACKAGES[a].cost - PACKAGES[b].cost)[0];
-  const mods = MODS.filter((m) => m.applies.includes(pkg) && tally.mods[m.id] * 2 > tally.total).map((m) => m.id);
-  return { pkg, mods, tie: leaders.length > 1, votes: tally.total };
+  const voted = [...room.final.keys()].some((pid) => isVoter(room.players.get(pid)));
+  return resolve(room, voted ? room.final : room.straw);
 }
 
 function ehrSummary(room) {
@@ -236,8 +330,13 @@ function ehrSummary(room) {
       dismissed: rows.reduce((sum, e) => sum + e.n, 0),
       critSeen: crit.length,
       critMedianMs: crit.length ? crit[Math.floor(crit.length / 2)] : null,
-      gaveKcl: rows.filter((e) => e.given.includes('kcl')).length,
-      gaveAmox: rows.filter((e) => e.given.includes('amox')).length,
+      gaveSupp: rows.filter((e) => e.given.includes('supp')).length,
+      gaveLact: rows.filter((e) => e.given.includes('lact')).length,
+      insulin: rows.filter((e) => e.given.includes('insulin')).length,
+      doseContinue: rows.filter((e) => e.dose === 'continue').length,
+      doseReduce: rows.filter((e) => e.dose === 'reduce').length,
+      doseHold: rows.filter((e) => e.dose === 'hold').length,
+      doseNone: rows.filter((e) => !e.dose).length,
     };
   }
   return sides;
@@ -252,6 +351,10 @@ function viewFor(room, client) {
     const p = room.players.get(room.reps[role]);
     return p ? p.name : null;
   };
+  const voters = [...room.players.values()].filter(isVoter);
+  const voterIds = new Set(voters.map((p) => p.id));
+  const sizeOf = (map) => [...map.keys()].filter((pid) => voterIds.has(pid)).length;
+  const counts = roleCounts(room);
   const state = {
     code: room.code,
     isHost,
@@ -261,24 +364,25 @@ function viewFor(room, client) {
     timerTotal: step.timer || null,
     now: Date.now(),
     playerCount: room.players.size,
-    roleCounts: roleCounts(room),
+    voterCount: voters.length,
+    roleCounts: counts,
+    groupCounts: Object.fromEntries(GROUP_ORDER.map((g) => [g, ROLES.filter((r) => ROLE_INFO[r].group === g).reduce((n, r) => n + counts[r], 0)])),
     reps: Object.fromEntries(ROLES.map((r) => [r, repName(r)])),
     ehr: ehrSummary(room),
     problems: problemBoard(room),
     counts: {
-      reports: room.reports.size,
-      top: room.top.size,
-      straw: room.straw.size,
-      final: room.final.size,
+      reports: sizeOf(room.reports),
+      top: sizeOf(room.top),
+      straw: sizeOf(room.straw),
+      final: sizeOf(room.final),
       reflections: room.reflections.size,
     },
-    straw: tallyBallots(room, room.straw),
+    // Facts and offers that teams have published to the whole room, oldest first.
+    shared: [...room.shared.entries()].sort((x, y) => x[1].at - y[1].at).map(([id, v]) => ({ id, role: v.role })),
+    straw: resolve(room, room.straw),
   };
   // Final results stay sealed until the decision is announced.
-  if (room.stepIndex >= DECISION_INDEX) {
-    state.final = tallyBallots(room, room.final);
-    state.decision = decide(room);
-  }
+  if (room.stepIndex >= DECISION_INDEX) state.decision = decide(room);
   if (isHost) {
     state.lan = lanUrls();
     state.players = [...room.players.values()].map((p) => ({
@@ -293,11 +397,14 @@ function viewFor(room, client) {
     state.reflections = [...room.reflections.entries()]
       .map(([pid, r]) => ({ role: (room.players.get(pid) || {}).role, ...r }))
       .filter((r) => r.role);
+    state.hostOnly = true;
   } else {
     const p = room.players.get(client.pid);
     state.you = {
       name: p.name,
       role: p.role,
+      group: groupOf(p),
+      votes: isVoter(p),
       isRep: !!p.role && room.reps[p.role] === p.id,
       ehr: room.ehr.get(p.id) || null,
       report: room.reports.get(p.id) || { problems: [], other: '' },
@@ -325,6 +432,16 @@ function broadcast(room) {
 
 // ---------- actions ----------
 
+// Drag and drop on the three columns: put a problem in a named column (or cycle it when no column is given).
+function moveTier(room, body) {
+  const step = STEPS[room.stepIndex];
+  if (!OPEN.tier.includes(step.id)) return 'Priorities are locked.';
+  const id = body.problem || body.id;
+  if (!PROBLEM_IDS.includes(id)) return 'Unknown problem.';
+  const current = problemBoard(room)[id].tier;
+  room.tierOverride[id] = TIERS.includes(body.tier) ? body.tier : TIERS[(TIERS.indexOf(current) + 1) % TIERS.length];
+}
+
 function hostAction(room, body) {
   const step = STEPS[room.stepIndex];
   switch (body.type) {
@@ -342,13 +459,12 @@ function hostAction(room, body) {
       if (body.op === 'restart') room.timerEnd = Date.now() + step.timer * 1000;
       else room.timerEnd = Math.max(Date.now(), room.timerEnd) + 60 * 1000;
       return;
-    case 'tier': {
-      if (!OPEN.tier.includes(step.id)) return 'Priorities are locked.';
-      if (!PROBLEM_IDS.includes(body.id)) return 'Unknown problem.';
-      const current = problemBoard(room)[body.id].tier;
-      room.tierOverride[body.id] = TIERS[(TIERS.indexOf(current) + 1) % TIERS.length];
+    case 'tier':
+      return moveTier(room, body);
+    case 'shuffle':
+      if (step.id !== 'lobby') return 'Roles are locked once the simulation begins.';
+      shuffleRoles(room);
       return;
-    }
     case 'kick': {
       const player = [...room.players.values()].find((p) => p.pub === body.pub);
       if (player) removePlayer(room, player);
@@ -364,7 +480,7 @@ function playerAction(room, player, body) {
   const open = (kind) => OPEN[kind].includes(step.id);
   if (body.type === 'role') {
     if (player.role && step.id !== 'lobby') return 'Roles are locked once the simulation begins.';
-    const role = body.role === 'random' ? leastFilledRole(room) : body.role;
+    const role = body.role === 'random' ? seatPick(room) : body.role;
     if (!ROLES.includes(role)) return 'Unknown role.';
     player.role = role;
     return;
@@ -374,41 +490,60 @@ function playerAction(room, player, body) {
   switch (body.type) {
     case 'ehr': {
       if (!open('ehr')) return;
-      const prev = room.ehr.get(player.id) || { n: 0, critMs: null, given: [] };
-      const n = Math.max(prev.n, Math.min(200, parseInt(body.n, 10) || 0));
+      const prev = room.ehr.get(player.id) || { n: 0, critMs: null, given: [], dose: null };
+      const n = Math.max(prev.n, Math.min(400, parseInt(body.n, 10) || 0));
       const critMs = typeof body.critMs === 'number' && body.critMs >= 0 ? Math.round(body.critMs) : prev.critMs;
-      const given = body.given ? pickIds(body.given, DANGER_MEDS, 2) : prev.given;
-      room.ehr.set(player.id, { n, critMs, given });
+      const given = body.given ? pickIds(body.given, DANGER_MEDS, DANGER_MEDS.length) : prev.given;
+      const dose = DOSES.includes(body.dose) ? body.dose : prev.dose;
+      room.ehr.set(player.id, { n, critMs, given, dose });
       return;
     }
     case 'report': {
-      if (!open('report')) return 'Problem reports are closed.';
+      if (!open('report')) return 'Problem notes are closed.';
       room.reports.set(player.id, {
         problems: pickIds(body.problems, PROBLEM_IDS, PROBLEM_IDS.length),
         other: clean(body.other, 200),
       });
       return;
     }
+    case 'tier':
+      if (!isVoter(player) || room.reps[player.role] !== player.id) return 'Only team representatives can move cards.';
+      return moveTier(room, body);
     case 'top': {
-      if (!open('top')) return 'Team priorities are locked.';
+      if (!isVoter(player)) return 'Vendors listen in this phase.';
+      if (!open('top')) return 'Priorities are locked.';
       room.top.set(player.id, pickIds(body.problems, PROBLEM_IDS, TOP_PICKS));
       return;
     }
+    // Publish one of your team's private facts or offers to the whole room.
+    case 'share': {
+      if (room.stepIndex < SHARE_FROM || room.stepIndex >= DECISION_INDEX) return 'Nothing can be shared right now.';
+      if (SECRET_OWNER[body.secret] !== player.role) return 'That is not yours to share.';
+      if (!room.shared.has(body.secret)) room.shared.set(body.secret, { role: player.role, at: Date.now() });
+      return;
+    }
     case 'ballot': {
+      if (!isVoter(player)) return 'Vendors do not vote.';
       const kind = body.kind === 'final' ? 'final' : 'straw';
       if (!open(kind)) return 'That vote is closed.';
       if (!PACKAGE_IDS.includes(body.pkg)) return 'Choose a package first.';
-      room[kind].set(player.id, { pkg: body.pkg, mods: pickIds(body.mods, MOD_IDS, MOD_IDS.length) });
+      const offered = TERMS.filter((t) => termOffered(room, t) && t.applies.includes(body.pkg)).map((t) => t.id);
+      room[kind].set(player.id, {
+        pkg: body.pkg,
+        modules: body.pkg === 'd' ? pickIds(body.modules, MODULE_IDS, MODULE_IDS.length) : [],
+        terms: pickIds(body.terms, offered, offered.length),
+      });
       return;
     }
     case 'reflect': {
-      if (!open('reflect')) return 'The reflection form is not open.';
-      const rating = parseInt(body.rating, 10);
+      if (!open('reflect')) return 'The feedback form is not open.';
+      const text = (v) => String(v || '').trim().slice(0, 600);
       room.reflections.set(player.id, {
-        rating: rating >= 1 && rating <= 5 ? rating : null,
-        think: String(body.think || '').trim().slice(0, 600),
-        missing: String(body.missing || '').trim().slice(0, 600),
-        changes: String(body.changes || '').trim().slice(0, 600),
+        worst: PROBLEM_IDS.includes(body.worst) ? body.worst : null,
+        fixed: ['yes', 'partly', 'no'].includes(body.fixed) ? body.fixed : null,
+        surprised: text(body.surprised),
+        gaveup: text(body.gaveup),
+        learned: text(body.learned),
       });
       return;
     }
