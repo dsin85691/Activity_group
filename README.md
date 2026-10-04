@@ -1,6 +1,8 @@
-# 🏥 Fix the Hospital
+# 🏥 Bed 14: The EHR Game
 
-A multiplayer classroom simulation for Chapters 6 and 8. Students take hospital roles, use a deliberately dysfunctional EHR, agree on what is broken, hear a vendor's packages, negotiate, vote, and then see what their decision did to everyone a year later.
+CIS 7000 · Health Tech · Fictional teaching case, not for clinical use.
+
+A multiplayer classroom simulation built from the "Bed 14: EHR Game Briefs" set. Physicians and nurses live an EHR overload around one patient, James Whitfield, six days past a liver transplant. The hospital names what broke, hears a vendor, votes on a package within a $12M budget, and replays the case on the system it chose. Total running time: 60 minutes.
 
 No accounts, no database, no dependencies. One Node process holds each game in memory.
 
@@ -10,72 +12,88 @@ No accounts, no database, no dependencies. One Node process holds each game in m
 node server.js
 ```
 
-Open http://localhost:3000, click **HOST GAME**, and put that window on the projector. Students open the address shown on the host screen, click **JOIN GAME**, and enter the room code.
+Open http://localhost:3000, click **HOST GAME**, and put that window on the projector. The host is the facilitator. Students open the address shown on the host screen, click **JOIN GAME**, enter the room code and pick a role.
 
 Needs Node 18 or newer. Set `PORT` to use a different port.
 
 ## Getting students connected
 
-Students' laptops must be able to reach the machine running the server.
-
-- **Same Wi-Fi.** The server prints a `http://192.168.x.x:3000` address at startup and the host lobby displays it. This works on home and small-office networks. Campus networks (AirPennNet included) often block device-to-device traffic, so test it in the actual room beforehand.
-- **Hosted (most reliable for class).** Deploy this folder to any Node host such as Render or Railway, with start command `npm start`. Use a single instance, since games live in memory. On free tiers, open the site a minute before class to wake it up.
-- **Tunnel.** Run the server on your laptop and expose it with a tunnel such as `cloudflared tunnel --url http://localhost:3000`, then share the URL it gives you.
+- **Same Wi-Fi.** The server prints a `http://192.168.x.x:3000` address and the host lobby shows it. Campus networks often block device-to-device traffic, so test in the room beforehand.
+- **Hosted (most reliable).** Deploy this folder to a Node host such as Render or Railway with start command `npm start`, on a single instance.
+- **Tunnel.** Run locally and expose it, for example `cloudflared tunnel --url http://localhost:3000`.
 
 Restarting the server ends all games in progress.
 
 ## Roles
 
-The host is the **Hospital CEO** (your team). Students are Physicians, Nurses, CFOs, Patient Advocates, Safety & Ethics Officers, and Health IT Leads. Several students can share a role; each role is a team.
+| Group | Roles in the app | Votes |
+| --- | --- | --- |
+| 1. Executive leadership and board | CEO/Board | Yes; gives the go/no-go |
+| 2. Finance and revenue cycle | CFO | Yes; signs off the budget |
+| 3. Clinical end users | Physician team, Nurse team, Clinical leadership (CMO/CNO/pharmacists) | Yes |
+| 4. IT and informatics | IT | Yes |
+| 5. Vendors | Vendor | No |
+| 6. Compliance, legal and regulators | Compliance | Yes |
+| 7. Patients and patient advocate | Advocate | Yes |
 
-When the game starts, one **representative** is picked at random for each role team (marked ⭐). Representatives speak for their team in the hospital-wide steps. Teams can swap who speaks; the star is only a prompt.
+Each role sees only its own brief (files 07 to 15), from the lobby onward; the chip in the top bar reopens it. Physicians and nurses also get the clinical end users' brief from Phase 3. Each group has a spokesperson (⭐), picked at random, who breaks ties in the group's vote.
 
 ## Running the session
 
-The host advances every screen with **NEXT**; students' screens follow. **BACK** returns to the previous screen, **+1 MIN** and **RESTART TIMER** adjust the countdowns, and **SKIP TO DEBRIEF** jumps to the end from anywhere. Timings follow the whiteboard plan: 4 / 10 / 6 / 20 / 2–3 / 2–3 minutes.
+The host advances every screen with **NEXT**. **BACK**, **+1 MIN** and **RESTART TIMER** adjust as needed. The simulation and the quiz advance by themselves.
 
 | Phase | Screen | What happens | Timer |
-|---|---|---|---|
-| Lobby | Room code | Students join, pick or are assigned a role, read their role card | |
-| **1 · EHR Simulation** (4 min) | Before you fix it, use it | Each side reads its task. NEXT starts the simulation | |
-| | The simulation | Physicians hunt for a safety issue in a cluttered chart. Nurses do the 09:00 medication pass with a scanner that fails. CFOs and IT shadow the physician view; Advocates and Safety shadow the nurse view. Alerts interrupt everyone; alert #12 is the one that matters. Advances by itself | 2:30 |
-| | TIME. | The missed alerts are revealed, with how fast they were dismissed and how many people gave the dangerous drugs. Everyone ticks the problems they ran into | 1:30 |
-| **2 · Stakeholder Discussion** (10 min) | Team huddle | Role teams sit together, compare notes, and each member stars the 3 problems that matter most to their department | 4:00 |
-| | One problem list | All 15 problems sorted into Critical / Desirable / Lower priority from the stars. Representatives argue; the CEO clicks a problem to move it between columns | 6:00 |
-| **3 · Vendor Pitchfest** (6 min) | Call the vendor | Handshake. Representatives present the critical list | |
-| | Four packages | Cost, timeline, training, features, and how many problems in each tier every package fixes. None fixes everything | 5:00 |
-| **4 · Negotiation** (20 min) | Team huddle | Each role reads a private briefing on what every package means for them. The CFO team alone sees the budget. Everyone casts a straw vote and picks terms to demand | 7:00 |
-| | Hospital negotiation | Representatives negotiate, led by the CFO and Physician. The board shows positions overall, by role, and support for each term. Anyone can change position as it moves | 13:00 |
-| **5 · Voting** (2–3 min) | Final vote | One vote each, starting from each person's negotiated position. Results are sealed | 2:30 |
-| **6 · Decision + Outcome** (2–3 min) | The hospital has decided | Winning package, adopted terms, cost against budget, vote by role. Return the decision to the vendor; the CFO signs | |
-| | One year later | Students reopen Maria's chart: what is new, what is unchanged | |
-| | Consequences | What it fixed in each tier, what it cost, and what happened to each role and to Maria | |
-| | Reflection form | Rating plus three short answers, on students' own devices | 2:00 |
-| Debrief | Why was it so hard? | Discussion questions, the five architectures from Chapter 8, and the closing question | |
+| --- | --- | --- | --- |
+| 1. Simulation and crash | Read your brief | Physicians and nurses read their team brief. Executives, finance and IT shadow the physician chart; clinical leaders, compliance and advocates shadow the nurse chart. Vendors prepare their pitch | |
+| | Bed 14 | The ward clock runs 12:45 → 13:05. Alerts every 15 s, then every 5 s with an **Override all** button, then faster than anyone can read. Pages from consultants and the daughter. The 84-page fax lands as one image. At 13:02 the labs fire (tacrolimus 19.4, potassium 6.2, creatinine 2.4); at 13:03 the chart drops into downtime and the paper form takes over | 4:00 |
+| 2. Did you spot it? | Quiz | Eight rapid-fire questions, 20 s each. Each reveal shows where the clue was buried and tags problem numbers | 2:40 |
+| | Top five | Physicians and nurses each rank their top five problems; the lists merge | 0:40 |
+| 3. Stakeholder discussion | Discussion | Clinical pitch, reactions, priorities. Everyone stars five problems; the facilitator clicks a problem to move it in or out of the agreed top five. Vendors wait outside | 10:00 |
+| 4. Handshake and pitch fest | Handshake | The CEO reads the top five to the vendor | 1:00 |
+| | Pitch fest | Five packages. Vendors see every catch privately; the facilitator clicks **Reveal catch** when a question reaches one | 6:00 |
+| 5. Discussion, voting and decision | Finance framing | $12M cap, finance's asks, the combinations table | 2:00 |
+| | Team discussion | Each player picks a first and second choice (one package or a pair); the group's choice is its plurality | 6:00 |
+| | All-team discussion | The board shows every group's first and second choice | 12:00 |
+| | Voting | One vote per group: the plurality of its members, with the spokesperson breaking ties. Results are sealed | 3:00 |
+| | Decision | The CFO signs off, or approves a phased contract or rejects anything over $12M. The CEO gives go or no-go; on a no-go the runner-up goes forward. The facilitator can press any of these buttons if a role is empty | 3:00 |
+| 6. Outcome | The replay | Bed 14 replays on the chosen packages, then the happy ending. Clinicians see their own crash-time calls | 10:00 |
+| | Next cycle | Problems fixed, problems carried over (always including 13) | |
 
-The projector never shows the two critical alerts or any private briefing before its reveal.
+Hospital ranking: most group votes, then most individual votes, then the cheaper choice.
 
-### How the decision is made
+### Clues in the chart
 
-- The package with the most votes wins. A tie goes to the cheaper option, which means "keep the current EHR" wins any tie it is part of.
-- A negotiated term (pilot first, phased payments, insurer co-funding, nurse backfill, shared AI liability, AI labeling, integration gate) is adopted if more than half of voters ask for it and it applies to the winning package.
-- Terms change the cost, the timeline, and the consequences each role sees.
+Every clue from the Phase 1 brief is on its own screen, and the app records which ones each player opens; the quiz reveal tells players whether they opened it.
 
-### Things that come up
+- Tremor: Notes → Nursing, 05:30.
+- Two consult warnings about tacrolimus: Notes → Consults (nephrology, pharmacy).
+- Donor culture: the separate Transplant Module, which takes two clicks to launch and log in. Nurses are denied access.
+- Artery flow: the body of the ultrasound report under Imaging.
+- QTc 492 ms: the unreviewed ECG in Media.
+- EWS of 5 with no physician called: the vitals.
+- Conflicting potassium orders: the supplement, the replacement protocol and the low-potassium diet.
+- Three home medication lists: Med Rec. The oldest, from March, was imported.
 
-- **Late arrivals** can join at any point and pick a role.
-- **Closed tab or dead laptop:** the student rejoins with the same name and gets their seat back.
-- **Removing a player:** click the ✕ on their name in the host lobby.
-- **Host refresh** is safe. If the host tab is closed, the home page offers "Resume hosting room ####" in the same browser.
-- **Reflections:** from the consequences screen onward the host bar has a button that downloads every response as a CSV. Download it before closing the game; nothing is stored after the server stops.
+Also in the chart:
 
-### Trying it alone
-
-Open the host in one tab and a few player tabs alongside it; each tab is a separate player. Keep it to four player tabs per browser. Browsers allow six connections to one site, and every open game tab holds one, so more tabs than that will freeze. Use a second browser if you want more. Students on their own devices are unaffected.
+- The 11:06 addendum where five alerts were acknowledged in one line.
+- Vitals and weight in three places: the weight in three screens, plus three nurse flowsheets that each need the same vitals.
+- The old resistant E. coli on page 52 of the fax.
+- The unreported second tumor on pathology.
+- The therapy note recommending rehab.
 
 ## Changing the content
 
-- `public/content.js` — roles and private briefings, the 15 problems, the four packages (cost, timeline, features, which problems each fixes, consequences per role), the negotiable terms, and the CFO's budget.
-- `public/app.js` — every screen, both EHR simulations (`ALERTS`, `MAR`), and the "one year later" chart (`AFTER`).
-- `server.js` — rooms, votes, and the live update stream. Screen order and timer lengths are in `STEPS` at the top.
-- `public/style.css` — command-center theme and the deliberately ugly EHR.
+- `public/content.js` covers:
+  - Groups, roles and every brief, as markdown pasted from the brief set.
+  - The 15 problems.
+  - The five packages: cost, fixes, pitch, catch and replay moment.
+  - The combinations table, the quiz and the happy ending.
+  - `SIM`: the Phase 1 timeline, alerts, pages, decisions and clues for both teams.
+- `public/app.js` has every screen and the bed 14 chart itself (`VIEW`, `NOTES`, `MEDS`, `LABS`, the fax).
+- `server.js` holds rooms, quiz timing, rankings, group voting and the decision. Screen order and timers are in `STEPS`.
+- `public/style.css` holds the command-center theme and the deliberately awful EHR.
+
+## Acceptance tests
+
+The cases from `16-test-cases.md` are automated in `tests/acceptance/`. Run them with `npm install && npx playwright install chromium`, then `npm run test:acceptance`. See `tests/acceptance/README.md`.

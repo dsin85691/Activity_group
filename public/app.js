@@ -1,107 +1,31 @@
 (() => {
   'use strict';
 
-  const { ROLE_ORDER, ROLES, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODS, BUDGET } = window.CONTENT;
+  const C = window.CONTENT;
+  const { GROUPS, VOTING_GROUPS, ROLE_ORDER, ROLES, GROUP_BRIEF, PROBLEMS, BUDGET, PACKAGE_ORDER, PACKAGES, COMBOS, FINANCE_ASKS } = C;
+  const { QUIZ, QUIZ_SECONDS, QUIZ_ANSWER_SECONDS, RANK_PICKS, HAPPY_ENDING, SIM } = C;
   const PROBLEM = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
-  const BALLOT_ORDER = [...PACKAGE_ORDER, 'keep'];
-  const TOP_PICKS = 3;
+  const CLUE = Object.fromEntries(SIM.CLUES.map((c) => [c.id, c]));
+  const QUIZ_PROBLEMS = new Set(QUIZ.flatMap((q) => q.problems));
 
   const PHASE_TITLES = {
-    1: 'EHR SIMULATION', 2: 'STAKEHOLDER DISCUSSION', 3: 'VENDOR PITCHFEST',
-    4: 'NEGOTIATION', 5: 'VOTING', 6: 'DECISION & OUTCOME',
+    1: 'SIMULATION AND CRASH', 2: 'DID YOU SPOT IT?', 3: 'STAKEHOLDER DISCUSSION',
+    4: 'HANDSHAKE AND PITCH FEST', 5: 'DISCUSSION, VOTING AND DECISION', 6: 'OUTCOME',
   };
-  const TIERS = [
-    { k: 'critical', label: 'CRITICAL', hint: 'Must be fixed' },
-    { k: 'desirable', label: 'DESIRABLE', hint: 'Should be fixed' },
-    { k: 'lower', label: 'LOWER PRIORITY', hint: 'Can wait' },
-  ];
-
-  // ---------- the two EHR simulations ----------
-
-  // Interruptions fire every ALERT_GAP seconds; the one marked `crit` is the only one that matters.
-  const ALERT_START = 5;
-  const ALERT_GAP = 8;
-  const withTimes = (list) => list.map((a, i) => ({ ...a, t: ALERT_START + i * ALERT_GAP }));
-  const ALERTS = {
-    physician: withTimes([
-      { title: 'Flu vaccine overdue', sub: 'Last documented: 10/2022' },
-      { title: 'BMI = 31.2', sub: 'Consider nutrition counseling referral' },
-      { title: 'Address has not been verified', sub: 'Last verified: 14 months ago' },
-      { title: 'Annual wellness visit overdue', sub: 'Last completed: 02/2024' },
-      { title: 'Preferred pharmacy not on file', sub: 'Update in Demographics' },
-      { title: 'Tobacco use status not updated', sub: 'Last reviewed: over 12 months ago' },
-      { title: 'Diabetic foot exam overdue', sub: 'Health maintenance topic' },
-      { title: 'Patient portal not activated', sub: 'Offer activation code at checkout' },
-      { title: 'Fall risk screening incomplete', sub: 'Required once per encounter' },
-      { title: 'Advance directive not on file', sub: 'Ask patient at next visit' },
-      { title: 'Colorectal cancer screening due', sub: 'Health maintenance topic' },
-      { title: 'Severe penicillin allergy', sub: 'Current order: amoxicillin', crit: true },
-      { title: 'Duplicate therapy: lisinopril', sub: 'Appears twice on medication list' },
-      { title: 'Depression screening (PHQ-2) overdue', sub: 'Last completed: 06/2023' },
-      { title: 'Emergency contact not verified', sub: 'Last verified: 2 years ago' },
-      { title: 'Pneumococcal vaccine overdue', sub: 'Health maintenance topic' },
-      { title: 'Insurance eligibility re-check needed', sub: 'Coverage last confirmed: 01/2025' },
-      { title: 'Medication reconciliation incomplete', sub: 'Required before discharge' },
-    ]),
-    nurse: withTimes([
-      { title: 'Fall risk reassessment due', sub: 'Required every shift' },
-      { title: 'Pain reassessment overdue', sub: 'Last charted: 4 h 12 min ago' },
-      { title: 'Intake & output not charted', sub: 'Current shift' },
-      { title: 'Skin assessment due', sub: 'Braden score required' },
-      { title: 'Patient education not documented', sub: 'Topic: diabetes' },
-      { title: 'Care plan needs update', sub: 'Last updated: 26 hours ago' },
-      { title: 'Scanner battery low', sub: 'Dock device at end of shift' },
-      { title: 'Flu vaccine screening incomplete', sub: 'Admission requirement' },
-      { title: 'IV site assessment due', sub: 'Required every 4 hours' },
-      { title: 'Height and weight not verified', sub: 'Verify on admission' },
-      { title: 'Belongings checklist incomplete', sub: 'Admission requirement' },
-      { title: 'Critical lab: potassium 6.2', sub: 'Due now: potassium chloride 20 mEq', crit: true },
-      { title: 'Hourly rounding not documented', sub: 'Last charted: 09:00' },
-      { title: 'Admission history incomplete', sub: '3 of 41 fields missing' },
-      { title: 'Interpreter need not assessed', sub: 'Admission requirement' },
-      { title: 'Discharge planning screen due', sub: 'Required within 24 hours' },
-      { title: 'Telemetry order expiring', sub: 'Renew or discontinue' },
-      { title: 'Duplicate task: vital signs', sub: 'Appears on two worklists' },
-    ]),
-  };
-  const critNumber = (side) => ALERTS[side].findIndex((a) => a.crit) + 1;
-
-  const SIM = {
-    physician: {
-      task: '<b>Your patient is getting worse.</b> Find the most important safety issue in this chart.',
-      brief: 'Your patient Maria Rodriguez is getting worse. Find the most important safety issue in her chart.',
-      missed: '⚠️ <b>Severe penicillin allergy</b> — Current order: <b>amoxicillin</b>',
-      lookalike: 'Flu vaccine overdue',
-    },
-    nurse: {
-      task: "<b>It's 09:00 and you are behind.</b> Give Maria her morning medications. Only the ones that are safe.",
-      brief: "It's 09:00 and you are already behind. Give Maria Rodriguez her morning medications, but only the ones that are safe to give.",
-      missed: '⚠️ <b>Critical lab: potassium 6.2</b> — Due now: <b>potassium chloride 20 mEq</b>',
-      lookalike: 'Scanner battery low',
-    },
+  const STEP_TITLES = {
+    p1_intro: 'Read your brief', p1_sim: 'Bed 14', p2_quiz: 'Quiz', p2_rank: 'Top five',
+    p3_discuss: 'Discussion', p4_handshake: 'Handshake', p4_pitch: 'Pitch fest',
+    p5_framing: 'Finance framing', p5_intra: 'Team discussion', p5_inter: 'All-team discussion',
+    p5_vote: 'Voting', p5_decision: 'Decision', p6_replay: 'The replay', p6_wrap: 'Next cycle',
   };
 
-  // Morning medication pass. `fail` meds refuse to scan the first time, forcing an override.
-  const MAR = [
-    { id: 'metformin', text: 'metFORMIN 1000 mg tab PO', fail: true },
-    { id: 'lis20', text: 'lisinopril 20 mg tab PO' },
-    { id: 'lis10', text: 'lisinopril 10 mg tab PO', fail: true },
-    { id: 'omep', text: 'omeprazole 20 mg cap PO' },
-    { id: 'kcl', text: 'potassium chloride 20 mEq ER tab PO', fail: true },
-    { id: 'asa', text: 'aspirin 81 mg EC tab PO' },
-    { id: 'amox', text: 'amoxicillin 500 mg cap PO — FIRST DOSE' },
-    { id: 'vitd', text: 'cholecalciferol 2000 units cap PO', fail: true },
-    { id: 'iron', text: 'ferrous sulfate 325 mg tab PO' },
-    { id: 'insulin', text: 'insulin lispro per sliding scale SUBQ', fail: true },
-  ];
-
-  // ---------- state ----------
+  // ---------- state and helpers ----------
 
   const app = document.getElementById('app');
   const toastEl = document.getElementById('toast');
   const esc = (s) =>
     String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const money = (m) => `$${m.toFixed(1)}M`;
+  const money = (m) => `$${m}M`;
   const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0);
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -153,6 +77,84 @@
     });
   }
 
+  // A small renderer for the brief set's markdown: headings, tables, lists, bold and paragraphs.
+  function md(src) {
+    const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    const cells = (row) => row.split('|').slice(1, -1).map((c) => c.trim());
+    const isList = (l) => /^(- |\d+\. )/.test(l);
+    const lines = src.split('\n');
+    let html = '';
+    for (let i = 0; i < lines.length;) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      if (line.startsWith('# ')) { html += `<h2>${inline(line.slice(2))}</h2>`; i++; continue; }
+      if (line.startsWith('## ')) { html += `<h3>${inline(line.slice(3))}</h3>`; i++; continue; }
+      if (line.startsWith('|')) {
+        const rows = [];
+        while (i < lines.length && lines[i].startsWith('|')) rows.push(lines[i++]);
+        const [head, , ...body] = rows;
+        html += `<table><tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join('')}</tr>${body.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table>`;
+        continue;
+      }
+      if (isList(line)) {
+        const tag = /^\d/.test(line) ? 'ol' : 'ul';
+        const items = [];
+        while (i < lines.length && isList(lines[i])) items.push(lines[i++].replace(/^(- |\d+\. )/, ''));
+        html += `<${tag}>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</${tag}>`;
+        continue;
+      }
+      const para = [];
+      while (i < lines.length && lines[i].trim() && !/^(#|\|)/.test(lines[i]) && !isList(lines[i])) para.push(lines[i++]);
+      html += `<p>${inline(para.join(' '))}</p>`;
+    }
+    return html;
+  }
+
+  // Briefs arrive from the server: a player gets only their own (and their group's); the facilitator gets all.
+  const briefs = { key: null, briefs: {}, phases: [], catches: {}, loading: false };
+  function loadBriefs() {
+    const key = session ? (session.hostKey ? 'host' : `${session.id}:${S && S.you ? S.you.role : ''}`) : null;
+    if (!key || key === briefs.key || briefs.loading) return;
+    if (!session.hostKey && !(S && S.you && S.you.role)) return;
+    briefs.loading = true;
+    const who = session.hostKey ? { hostKey: session.hostKey } : { id: session.id };
+    api('/api/briefs', { code: session.code, ...who })
+      .then((res) => {
+        Object.assign(briefs, { key, briefs: res.briefs || {}, phases: res.phases || [], catches: res.catches || {} });
+        screenKey = null; // redraw the screen with the brief in it
+        render();
+      })
+      .catch(() => {})
+      .finally(() => { briefs.loading = false; });
+  }
+  const BRIEFS = new Proxy({}, { get: (_, role) => briefs.briefs[role] });
+
+  // One "## Heading" section of a brief, as markdown.
+  function briefSection(role, heading) {
+    const src = BRIEFS[role] || '';
+    const start = src.indexOf(`## ${heading}`);
+    if (start < 0) return '';
+    const rest = src.slice(start + heading.length + 3);
+    const end = rest.indexOf('\n## ');
+    return end < 0 ? rest : rest.slice(0, end);
+  }
+
+  const briefHtml = (role) => (BRIEFS[role] ? `<div class="brief">${md(BRIEFS[role])}</div>` : '<p class="muted">Loading your brief…</p>');
+  // Physicians and nurses also hold the clinical end users' brief once leadership gets involved.
+  function myBriefs(withGroup) {
+    const role = S.you.role;
+    const group = withGroup && GROUP_BRIEF[role];
+    return briefHtml(role) + (group ? `<details class="recall"><summary>Your group's brief: ${esc(GROUPS[3].name)}</summary>${briefHtml(group)}</details>` : '');
+  }
+
+  const choiceTitle = (key) => C.choiceLetters(key).map((l) => `${l}. ${PACKAGES[l].name}`).join(' + ');
+  const choiceShort = (key) => C.choiceLetters(key).join(' + ');
+  const problemChip = (id, cls) => `<span class="pchip ${cls || ''}">${id} · ${esc(PROBLEM[id].label)}</span>`;
+  const mySimSide = () => ROLES[S.you.role].sim;
+  const myGroup = () => ROLES[S.you.role].group;
+  const isVoter = () => VOTING_GROUPS.includes(myGroup());
+  const displayName = () => (S.you.role === 'physician' ? `Dr. ${S.you.name}` : S.you.name);
+
   // ---------- connection ----------
 
   function connect() {
@@ -165,9 +167,7 @@
       setOnline(true);
       render();
     };
-    es.addEventListener('gone', () => {
-      leave('That game is no longer running.');
-    });
+    es.addEventListener('gone', () => leave('That game is no longer running.'));
     es.onerror = () => setOnline(false);
   }
 
@@ -179,12 +179,13 @@
   function leave(message) {
     if (es) es.close();
     es = null;
-    if (session && session.hostKey) store.del(localStorage, 'fth_host');
-    store.del(sessionStorage, 'fth_session');
+    if (session && session.hostKey) store.del(localStorage, 'b14_host');
+    store.del(sessionStorage, 'b14_session');
     session = null;
     S = null;
     screenKey = null;
-    ehrStop();
+    briefs.key = null;
+    simStop();
     homeView = 'home';
     homeError = message || '';
     setOnline(true);
@@ -193,8 +194,8 @@
 
   function startSession(next) {
     session = next;
-    store.set(sessionStorage, 'fth_session', session);
-    if (session.hostKey) store.set(localStorage, 'fth_host', session);
+    store.set(sessionStorage, 'b14_session', session);
+    if (session.hostKey) store.set(localStorage, 'b14_host', session);
     connect();
   }
 
@@ -202,7 +203,7 @@
 
   function renderHome() {
     document.body.className = 'home';
-    const savedHost = store.get(localStorage, 'fth_host');
+    const savedHost = store.get(localStorage, 'b14_host');
     const prefill = new URLSearchParams(location.search).get('room') || '';
     let body;
     if (homeView === 'join') {
@@ -227,14 +228,14 @@
     }
     app.innerHTML = `
       <main class="home-wrap">
-        <div class="home-title"><span class="home-icon">🏥</span> FIX THE HOSPITAL</div>
+        <div class="home-title"><span class="home-icon">🏥</span> BED 14</div>
         <svg class="ecg" viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true">
           <polyline points="0,30 120,30 140,30 155,10 170,50 185,2 200,58 215,30 240,30 360,30 380,30 395,10 410,50 425,2 440,58 455,30 480,30 600,30"/>
         </svg>
-        <p class="home-lead"><b>Penn General is falling apart.</b></p>
-        <p class="home-copy">Doctors and nurses hate the EHR. Patients are waiting too long. Costs are rising. Staff are overwhelmed.</p>
-        <p class="home-copy">A vendor says it can fix it.</p>
-        <p class="home-lead">Your job: decide what is broken, what to buy, and whether the hospital can agree.</p>
+        <p class="home-lead"><b>Riverbend University Hospital, September 29, 12:45.</b></p>
+        <p class="home-copy">James Whitfield is six days past a liver transplant, and every clue about what is going wrong sits on a different screen.</p>
+        <p class="home-lead">Live the EHR overload, name what broke, then choose and fund the fix.</p>
+        <p class="home-copy small">CIS 7000 · Health Tech · Fictional teaching case, not for clinical use</p>
         ${homeError ? `<p class="error">${esc(homeError)}</p>` : ''}
         ${body}
       </main>`;
@@ -246,7 +247,13 @@
 
   function remainingMs() {
     if (!S || !S.timerEnd) return null;
+    if (S.paused) return S.pausedMs;
     return Math.max(0, S.timerEnd - (Date.now() + clockOffset));
+  }
+  // Seconds since the current step started.
+  function stepElapsed() {
+    const ms = remainingMs();
+    return ms === null ? 0 : (S.timerTotal || 0) - ms / 1000;
   }
 
   function clock(ms) {
@@ -267,480 +274,863 @@
       el.classList.toggle('low', ms > 0 && ms <= 10000);
       el.classList.toggle('done', ms === 0);
     });
-    ehrTick();
+    if (S) {
+      const left = (ms || 0) / 1000 + S.sessionAfter;
+      const total = Math.round(S.sessionTotal / 60);
+      const label = `Session ${clock(left * 1000)} left · total ${total} min${S.overtime ? ' · over time' : ''}${S.paused ? ' · PAUSED' : ''}`;
+      document.querySelectorAll('[data-session]').forEach((el) => { el.textContent = label; el.classList.toggle('over', !!S.overtime); });
+      substepTick();
+      pitchTick();
+    }
+    if (S && S.step === 'p1_sim') {
+      const time = SIM.clockAt(stepElapsed());
+      document.querySelectorAll('[data-simclock]').forEach((el) => { el.textContent = time; });
+    }
+    simTick();
+    quizTick();
   }
   setInterval(tick, 250);
 
-  // ---------- EHR engine: interruptions and the medication pass ----------
+  // ---------- Phase 1: the bed 14 chart ----------
 
-  const ehr = { active: false, live: true, alerts: [], next: 0, queue: [], current: null, shownAt: 0, n: 0, shown: 0, gapUntil: 0, startedAt: 0, mar: {} };
+  // Both teams open the same patient. Each tab is one screen; every clue sits on a different one.
+  const sim = { active: false, side: null, conf: null, next: 0, queue: [], current: null, shownAt: 0, gapUntil: 0, tab: 'summary', notesTab: 'progress', open: {}, fax: 1, tx: 0, labs: false, faxIn: false, down: false, msgSig: null, msgCount: -1, repliedAt: {}, flowVals: {}, assessDone: new Set(), chart: null, saveTimer: null };
 
-  // `live` runs follow the server's round timer and report to it; replays after the decision are local only.
-  function ehrStart(alerts, live) {
-    Object.assign(ehr, { active: true, live, alerts, queue: [], current: null, n: 0, gapUntil: 0, startedAt: Date.now(), mar: {} });
-    const elapsed = ehrElapsed();
+  function simStart(side) {
+    const conf = SIM.SIDES[side];
+    const saved = (S.you.sim && S.you.sim.chart) || {};
+    const chart = {
+      alerts: { ...saved.alerts }, pages: { ...saved.pages }, clues: [...(saved.clues || [])],
+      decisions: JSON.parse(JSON.stringify(saved.decisions || {})), notes: saved.notes || '',
+      mar: { ...saved.mar }, flow: [...(saved.flow || [])], assess: saved.assess || 0, overrides: saved.overrides || 0,
+      findings: [...(saved.findings || [])],
+    };
+    Object.assign(sim, {
+      active: true, side, conf, queue: [], current: null, gapUntil: 0, tab: conf.tabs[0][0], notesTab: 'progress', open: {}, fax: 1, tx: 0,
+      labs: false, faxIn: false, down: false, msgSig: null, msgCount: -1, repliedAt: {}, flowVals: {},
+      assessDone: new Set(conf.assessments ? conf.assessments.slice(0, chart.assess) : []), chart,
+    });
     // After a mid-round reload, skip interruptions that already fired.
-    ehr.next = alerts.findIndex((a) => a.t > elapsed - 1);
-    if (ehr.next < 0) ehr.next = alerts.length;
-    ehr.shown = ehr.next;
+    const elapsed = stepElapsed();
+    sim.next = conf.alerts.findIndex((a) => a.t > elapsed - 1);
+    if (sim.next < 0) sim.next = conf.alerts.length;
+    sideShell();
+    renderFindings();
+    showTab(sim.tab);
+    simTick();
   }
 
-  function ehrStop() {
-    ehr.active = false;
-    ehr.current = null;
-    ehr.mar = {};
+  function simStop() {
+    if (!sim.active) return;
+    if (sim.saveTimer) {
+      clearTimeout(sim.saveTimer);
+      sim.saveTimer = null;
+      act('sim', { chart: sim.chart });
+    }
+    sim.active = false;
+    sim.current = null;
   }
 
-  function ehrElapsed() {
-    if (!ehr.live) return (Date.now() - ehr.startedAt) / 1000;
-    const ms = remainingMs();
-    return ms === null ? 0 : (S.timerTotal || 150) - ms / 1000;
+  function simSave() {
+    clearTimeout(sim.saveTimer);
+    sim.saveTimer = setTimeout(() => {
+      sim.saveTimer = null;
+      act('sim', { chart: sim.chart });
+    }, 300);
   }
 
-  function ehrTick() {
-    if (!ehr.active) return;
-    const elapsed = ehrElapsed();
-    while (ehr.next < ehr.alerts.length && ehr.alerts[ehr.next].t <= elapsed) ehr.queue.push(ehr.alerts[ehr.next++]);
-    if (ehr.current || !ehr.queue.length || Date.now() < ehr.gapUntil) return;
-    const layer = document.getElementById('ehr-alert');
+  function clue(...ids) {
+    const fresh = ids.filter((id) => id && !sim.chart.clues.includes(id));
+    if (!fresh.length) return;
+    sim.chart.clues.push(...fresh);
+    simSave();
+  }
+
+  function simTick() {
+    if (!sim.active) return;
+    const sec = stepElapsed();
+    if (!sim.labs && sec >= SIM.LABS_AT) {
+      sim.labs = true;
+      if (!sim.down && ['results', 'summary'].includes(sim.tab)) refresh();
+    }
+    if (!sim.faxIn && sec >= SIM.FAX_AT) {
+      sim.faxIn = true;
+      if (!sim.down && sim.tab === 'media') refresh();
+    }
+    if (!sim.down && sec >= SIM.DOWN_AT) goDown(sec - SIM.DOWN_AT > 5);
+    pagerTick(sec);
+    if (sim.down) return;
+    const alerts = sim.conf.alerts;
+    while (sim.next < alerts.length && alerts[sim.next].t <= sec) {
+      const a = alerts[sim.next++];
+      if (!sim.chart.alerts[a.id]) sim.queue.push(a);
+    }
+    const waiting = document.querySelector('[data-simwaiting]');
+    if (waiting) waiting.textContent = sim.queue.length ? `${sim.queue.length} more waiting` : '';
+    const all = document.querySelector('[data-simoverride]');
+    if (all) all.textContent = `OVERRIDE ALL (${sim.queue.length + 1})`;
+    else if (sim.current && sec >= SIM.OVERRIDE_AT) {
+      document.querySelector('#sim-alert .wf-alert-btns')?.insertAdjacentHTML('beforeend', `<button class="ehr-btn override" data-act="sim-alert" data-a="override" data-simoverride>OVERRIDE ALL (${sim.queue.length + 1})</button>`);
+    }
+    if (!sim.current && sim.queue.length && Date.now() >= sim.gapUntil) showAlert(sec);
+  }
+
+  function showAlert(sec) {
+    const layer = document.getElementById('sim-alert');
     if (!layer) return;
-    ehr.current = ehr.queue.shift();
-    ehr.shownAt = Date.now();
-    ehr.shown++;
+    sim.current = sim.queue.shift();
+    sim.shownAt = Date.now();
+    const override = sec >= SIM.OVERRIDE_AT ? `<button class="ehr-btn override" data-act="sim-alert" data-a="override" data-simoverride>OVERRIDE ALL (${sim.queue.length + 1})</button>` : '';
     layer.innerHTML = `
       <div class="ehr-alert-box">
-        <div class="ehr-alert-head">Clinical Advisory <span>#${ehr.shown}</span></div>
+        <div class="ehr-alert-head">Clinical Advisory <span>#${sim.conf.alerts.indexOf(sim.current) + 1}</span></div>
         <div class="ehr-alert-body">
           <div class="ehr-alert-icon">⚠️</div>
           <div>
-            <div class="ehr-alert-title">${esc(ehr.current.title)}</div>
-            <div class="ehr-alert-sub">${esc(ehr.current.sub)}</div>
+            <div class="ehr-alert-title">${esc(sim.current.title)}</div>
+            <div class="ehr-alert-sub">${esc(sim.current.sub)}</div>
           </div>
         </div>
-        <button class="ehr-btn" data-act="dismiss">DISMISS</button>
+        <div class="wf-alert-btns">
+          <button class="ehr-btn" data-act="sim-alert" data-a="ack">ACKNOWLEDGE</button>
+          <button class="ehr-btn" data-act="sim-alert" data-a="act">ACT ON IT</button>
+          <button class="ehr-btn" data-act="sim-alert" data-a="dismiss">DISMISS</button>
+          ${override}
+        </div>
+        <div class="wf-waiting" data-simwaiting>${sim.queue.length ? `${sim.queue.length} more waiting` : ''}</div>
       </div>`;
     layer.classList.add('show');
   }
 
-  function ehrDismiss() {
-    if (!ehr.current) return;
-    const report = { n: ++ehr.n };
-    if (ehr.current.crit) report.critMs = Date.now() - ehr.shownAt;
-    ehr.current = null;
-    ehr.gapUntil = Date.now() + 500;
-    const layer = document.getElementById('ehr-alert');
+  function alertAction(a) {
+    const alert = sim.current;
+    if (!alert) return;
+    const ms = Date.now() - sim.shownAt;
+    const sec = stepElapsed();
+    const stamp = { at: SIM.clockAt(sec), t: Math.round(sec) };
+    sim.chart.alerts[alert.id] = { a, ms, ...stamp };
+    // One click clears the whole stack, the way five alerts vanished at 11:06.
+    if (a === 'override') {
+      for (const q of sim.queue) sim.chart.alerts[q.id] = { a: 'override', ms: 0, ...stamp };
+      sim.queue = [];
+      sim.chart.overrides++;
+    }
+    sim.current = null;
+    sim.gapUntil = Date.now() + 350;
+    const layer = document.getElementById('sim-alert');
     if (layer) layer.classList.remove('show');
-    if (ehr.live) act('ehr', report);
+    if (a === 'act' && alert.go) showTab(alert.go);
+    simSave();
   }
 
-  function marCell(med) {
-    const state = ehr.mar[med.id];
-    if (state === 'given') return '<span class="mar-given">Given 09:0' + ((MAR.indexOf(med) % 9) + 1) + ' ✓</span>';
-    if (state === 'fail') {
-      return `<span class="mar-fail">Barcode not recognized.</span> <button class="ehr-btn sm" data-act="mar" data-med="${med.id}">Override</button>`;
+  function goDown(already) {
+    sim.down = true;
+    sim.queue = [];
+    sim.current = null;
+    const layer = document.getElementById('sim-alert');
+    if (layer) layer.classList.remove('show');
+    const down = document.getElementById('sim-down');
+    if (!down) return;
+    const message = `
+      <div class="wf-down-box">
+        <div class="wf-down-head">⛔ UNPLANNED DOWNTIME</div>
+        <p><b>MedChart is not responding.</b> Orders won't sign. Results, notes and the MAR cannot be viewed.</p>
+        <p>Keep caring for Mr. Whitfield. Record what you would do on the <b>paper downtime form</b> →</p>
+        <p><button class="ehr-btn sm" data-act="sim-sign">Sign pending orders (3)</button> <span class="wf-signfail" data-signfail></span></p>
+        <p class="small">The pager still works.</p>
+      </div>`;
+    down.innerHTML = already ? message : '<div class="wf-freeze">MedChart Enterprise 9.4.1 (Not Responding)<div class="wf-spin"></div></div>';
+    down.classList.add('show');
+    if (!already) setTimeout(() => { if (sim.active) down.innerHTML = message; }, 4000);
+    sideTab('notes');
+  }
+
+  // ---------- pager ----------
+
+  function messages(sec) {
+    const list = [];
+    for (const p of sim.conf.pages) {
+      if (p.t > sec) continue;
+      list.push(p);
+      if (p.then && sim.chart.pages[p.id] === p.then.on) {
+        const at = (sim.repliedAt[p.id] ?? -Infinity) + p.then.after;
+        if (sec >= at) list.push({ id: `${p.id}_then`, t: Math.max(p.t, at), from: p.then.from, text: p.then.text });
+      }
     }
-    return `<button class="ehr-btn sm" data-act="mar" data-med="${med.id}">Scan</button>`;
+    return list.sort((a, b) => b.t - a.t);
   }
 
-  function marClick(id) {
-    const med = MAR.find((m) => m.id === id);
-    if (!med || ehr.mar[id] === 'given') return;
-    ehr.mar[id] = med.fail && !ehr.mar[id] ? 'fail' : 'given';
-    const cell = document.querySelector(`[data-mar="${id}"]`);
-    if (cell) cell.innerHTML = marCell(med);
-    if (ehr.mar[id] === 'given') {
-      act('ehr', { n: ehr.n, given: MAR.filter((m) => ehr.mar[m.id] === 'given').map((m) => m.id) });
+  function pagerTick(sec) {
+    const list = messages(sec);
+    const sig = list.map((m) => `${m.id}:${sim.chart.pages[m.id] ?? ''}`).join(',');
+    if (sig === sim.msgSig) return;
+    if (sim.msgCount >= 0 && list.length > sim.msgCount) toast(`📟 ${list[0].from.split(' · ')[0]}`);
+    sim.msgSig = sig;
+    sim.msgCount = list.length;
+    const open = list.filter((m) => m.replies && sim.chart.pages[m.id] == null).length;
+    const badge = document.querySelector('[data-simbadge]');
+    if (badge) badge.textContent = open || '';
+    const body = document.getElementById('sim-pager');
+    if (!body) return;
+    body.innerHTML = list.length
+      ? list.map((m) => {
+          const answered = sim.chart.pages[m.id];
+          const replies = !m.replies ? ''
+            : answered != null ? `<div class="wf-replied">You: ${esc(m.replies[answered])}</div>`
+            : `<div class="wf-replies">${m.replies.map((r, i) => `<button data-act="sim-reply" data-id="${m.id}" data-n="${i}">${esc(r)}</button>`).join('')}</div>`;
+          return `
+            <div class="wf-page ${m.replies && answered == null ? 'new' : ''}">
+              <div class="wf-page-head"><b>${esc(m.from)}</b><span>${SIM.clockAt(m.t)}</span></div>
+              <p>${esc(m.text)}</p>${replies}
+            </div>`;
+        }).join('')
+      : '<p class="wf-quiet">No pages yet.</p>';
+  }
+
+  function reply(id, n) {
+    if (sim.chart.pages[id] != null) return;
+    sim.chart.pages[id] = n;
+    sim.repliedAt[id] = stepElapsed();
+    simSave();
+    sim.msgSig = null;
+    pagerTick(stepElapsed());
+  }
+
+  // ---------- findings log and decisions (a paper downtime form once the EHR is down) ----------
+
+  function decisionHtml(d, i) {
+    const value = sim.chart.decisions[d.id];
+    let body;
+    if (d.text) {
+      body = `<textarea data-simdec="${d.id}" rows="3" maxlength="800" placeholder="Situation, what you did, what to watch">${esc(value || '')}</textarea>`;
+    } else {
+      const on = (id) => (d.multi ? (value || []).includes(id) : value === id);
+      body = `<div class="wf-dec-opts">${d.options.map(([id, label]) => `<button class="${on(id) ? 'on' : ''}" data-act="sim-dec" data-id="${d.id}" data-opt="${id}">${esc(label)}</button>`).join('')}</div>`;
     }
+    return `<div class="wf-dec"><div class="wf-dec-q">${i + 1}. ${esc(d.q)}</div>${body}</div>`;
   }
 
-  // Deterministic jitter so every student reads the identical chart.
-  function seeded(seed) {
-    let x = seed;
-    return () => {
-      x = (x * 1664525 + 1013904223) % 4294967296;
-      return x / 4294967296;
-    };
-  }
-
-  function labsTable() {
-    const rand = seeded(67);
-    const dates = ['03/14/25', '11/02/24', '06/19/24', '01/08/24', '08/23/23', '02/11/23'];
-    // name, low, high, unit, today's value, usual value (when today is out of character)
-    const labs = [
-      ['Sodium', 135, 145, 'mmol/L', 139], ['Potassium', 3.5, 5.1, 'mmol/L', 6.2, 4.8], ['Chloride', 98, 107, 'mmol/L', 102],
-      ['CO2', 22, 29, 'mmol/L', 23], ['BUN', 7, 20, 'mg/dL', 31], ['Creatinine', 0.6, 1.1, 'mg/dL', 1.6],
-      ['eGFR', 60, 200, 'mL/min', 38], ['Glucose', 70, 99, 'mg/dL', 168], ['Calcium', 8.6, 10.2, 'mg/dL', 9.1],
-      ['HbA1c', 4, 5.6, '%', 7.9], ['WBC', 4, 11, 'K/uL', 13.8, 8.1], ['Hemoglobin', 12, 15.5, 'g/dL', 11.4],
-      ['Hematocrit', 36, 46, '%', 34.8], ['Platelets', 150, 400, 'K/uL', 262], ['AST', 10, 35, 'U/L', 24],
-      ['ALT', 7, 35, 'U/L', 22], ['Alk Phos', 40, 120, 'U/L', 88], ['T. Bili', 0.2, 1.2, 'mg/dL', 0.6],
-      ['Albumin', 3.5, 5, 'g/dL', 3.7], ['LDL', 0, 100, 'mg/dL', 112], ['HDL', 50, 99, 'mg/dL', 44],
-      ['Triglycerides', 0, 150, 'mg/dL', 188], ['TSH', 0.4, 4, 'mIU/L', 2.1], ['Urine alb/creat', 0, 30, 'mg/g', 142],
-      ['Procalcitonin', 0, 0.1, 'ng/mL', 0.62, 0.05], ['Lactate', 0.5, 2.2, 'mmol/L', 1.9],
-    ];
-    const rows = labs
-      .map(([name, lo, hi, unit, today, usual]) => {
-        const cells = dates
-          .map((_, i) => {
-            const v = i === 0 ? today : (usual || today) * (1 + (rand() - 0.5) * 0.3);
-            const text = today < 20 ? v.toFixed(1) : v.toFixed(0);
-            const flag = v > hi ? ' H' : v < lo ? ' L' : '';
-            return `<td>${text}${flag}</td>`;
-          })
-          .join('');
-        return `<tr><td>${name}</td>${cells}<td>${lo}–${hi} ${unit}</td></tr>`;
-      })
-      .join('');
-    return `<div class="ehr-box"><h4>Results — Chemistry / Hematology / Other (all dates)</h4>
-      <table><tr><th>Component</th>${dates.map((d) => `<th>${d}</th>`).join('')}<th>Ref range</th></tr>${rows}</table></div>`;
-  }
-
-  const VITALS = `<div class="ehr-box"><h4>Vitals — last 24h</h4>
-    <table><tr><th>Time</th><th>Temp</th><th>HR</th><th>BP</th><th>RR</th><th>SpO2</th><th>Pain</th><th>Wt</th></tr>
-    <tr><td>08:10</td><td>38.6 H</td><td>104 H</td><td>142/84</td><td>22 H</td><td>93% RA</td><td>3/10</td><td>77.0</td></tr>
-    <tr><td>04:05</td><td>38.3 H</td><td>98</td><td>138/82</td><td>20</td><td>94% RA</td><td>2/10</td><td>—</td></tr>
-    <tr><td>00:12</td><td>38.1 H</td><td>96</td><td>146/88</td><td>20</td><td>95% RA</td><td>2/10</td><td>—</td></tr>
-    <tr><td>20:01</td><td>37.9</td><td>92</td><td>150/90 H</td><td>18</td><td>95% RA</td><td>4/10</td><td>77.2</td></tr></table></div>`;
-
-  const OLD_ALLERGY_NOTE =
-    'ALLERGIES: PENICILLIN — anaphylaxis 1998 (throat swelling, required epinephrine), confirmed by pt and daughter. Avoid all penicillins incl. amoxicillin.';
-
-  function physicianBody() {
-    const problems = [
-      'Type II diabetes mellitus w/o complication (E11.9)', 'Type 2 diabetes mellitus with diabetic CKD (E11.22)',
-      'Essential hypertension (I10)', 'Chronic kidney disease, stage 3b (N18.32)', 'Hyperlipidemia, unspecified (E78.5)',
-      'Mixed hyperlipidemia (E78.2)', 'Primary osteoarthritis, bilateral knees (M17.0)', 'GERD without esophagitis (K21.9)',
-      'Obesity, BMI 30.0–34.9 (E66.9)', 'Vitamin D deficiency (E55.9)', 'Anemia in chronic kidney disease (D63.1)',
-      'Allergic rhinitis (J30.9)', 'Insomnia, unspecified (G47.00)', 'History of tobacco use (Z87.891)',
-      'Cataract, left eye (H26.9)', 'Low back pain (M54.50) — RESOLVED 2019?', 'Encounter for immunization (Z23)',
-      'Cough (R05.9)', 'Fever, unspecified (R50.9)', 'Hypertension (I10) — DUPLICATE',
-    ];
-    const meds = [
-      'metFORMIN 1000 mg tab — 1 tab PO BID', 'lisinopril 20 mg tab — 1 tab PO daily', 'lisinopril 10 mg tab — 1 tab PO daily (not taking?)',
-      'atorvastatin 40 mg tab — 1 tab PO nightly', 'omeprazole 20 mg cap — 1 cap PO daily', 'potassium chloride 20 mEq ER — 1 tab PO daily',
-      'acetaminophen 500 mg — 2 tabs PO q6h PRN pain', 'cholecalciferol 2000 units — 1 cap PO daily', 'aspirin 81 mg EC — 1 tab PO daily',
-      'loratadine 10 mg — 1 tab PO daily PRN', 'melatonin 3 mg — 1 tab PO nightly PRN', 'diclofenac 1% gel — apply to knees QID PRN',
-      'glucose test strips — use as directed', 'ferrous sulfate 325 mg — 1 tab PO daily (patient-reported)',
-    ];
-    const orders = [
-      'CBC w/ differential — collected', 'Basic metabolic panel — resulted', 'Chest X-ray 2 views — resulted', 'Procalcitonin — resulted',
-      'Blood culture x2 — in process', 'Pulse oximetry, continuous — active', 'Vital signs q4h — active', 'Diet: consistent carbohydrate — active',
-      'amoxicillin 500 mg cap — 1 cap PO TID x 7 days — pending verification', 'Point-of-care glucose AC & HS — active',
-      'Sputum culture — not collected', 'Fall precautions — active', 'Incentive spirometry q1h while awake — active',
-      'Nursing communication: encourage PO fluids — active',
-    ];
-    const copied =
-      'HPI: 67 y.o. female with PMH T2DM, HTN, CKD 3b, HLD, OA, GERD presents for follow up. Pt reports compliance with meds. Denies CP, SOB, N/V/D. ' +
-      'ROS: 14-point review of systems negative except as noted in HPI. PMH/PSH/FH/SH reviewed and unchanged from prior. ' +
-      'Exam: NAD, A&Ox3, RRR no m/r/g, CTAB, abd soft NT/ND, no LE edema. ' +
-      'A/P: 1) T2DM — cont metformin, A1c q3mo, diabetic foot exam, ophtho referral. 2) HTN — cont lisinopril, BP log. 3) CKD 3b — avoid nephrotoxins, renal dosing, BMP q6mo. ' +
-      '4) HLD — cont atorvastatin. 5) OA — acetaminophen PRN, PT referral. 6) GERD — cont omeprazole. 7) HM — flu vaccine, colonoscopy, mammogram due. RTC 3 months. ' +
-      'Total time 25 min, >50% counseling and coordination of care. Level of service 99214.';
-    const note = (date, author, head, extra) => `
-      <div class="ehr-note">
-        <div class="ehr-note-head">${date} — ${head} — ${author} — <i>signed</i></div>
-        <p>${extra || ''} ${copied}</p>
-      </div>`;
-    return `
-      <div class="ehr-cols">
-        <div class="ehr-box"><h4>Problem List (20)</h4><ul>${problems.map((p) => `<li>${p}</li>`).join('')}</ul></div>
-        <div class="ehr-box"><h4>Medications — Outpatient (14)</h4><ul>${meds.map((m) => `<li>${m}</li>`).join('')}</ul></div>
-        <div class="ehr-box"><h4>Active Orders (14)</h4><ul>${orders.map((o) => `<li>${o}</li>`).join('')}</ul></div>
+  function sideShell() {
+    const side = document.getElementById('sim-side');
+    if (!side) return;
+    side.innerHTML = `
+      <div class="wf-sidetabs">
+        <button data-act="sim-side" data-side="pager" class="on">📟 Pager <span class="wf-badge" data-simbadge></span></button>
+        <button data-act="sim-side" data-side="notes"><span data-simnoteslabel>📝 Findings &amp; decisions</span></button>
       </div>
-      ${VITALS}
-      ${labsTable()}
-      <div class="ehr-box"><h4>Notes (showing 6 of 143)</h4>
-        ${note('03/14/2025 08:42', 'You', 'H&P / Progress Note', 'CC: worsening cough x5d, fever. CXR: RLL infiltrate. Suspected community-acquired pneumonia. Plan: start amoxicillin 500 mg PO TID x7d. Allergies: reviewed.')}
-        ${note('11/02/2024 10:15', 'Chen, L MD', 'Office Visit', 'Allergies: reviewed.')}
-        ${note('06/19/2024 09:30', 'Chen, L MD', 'Office Visit', 'Allergies: reviewed.')}
-        ${note('01/08/2024 14:05', 'Patel, R NP', 'Office Visit', 'Allergies: per chart.')}
-        ${note('09/12/2019 11:20', 'Okafor, J MD', 'Office Visit', OLD_ALLERGY_NOTE)}
-        ${note('02/11/2019 08:50', 'Okafor, J MD', 'New Patient Visit', 'Records requested from outside facility.')}
-      </div>
-      <div class="ehr-cols">
-        <div class="ehr-box"><h4>Charges / Coding</h4><ul>
-          <li>99223 — Initial hospital care, high complexity</li><li>71046 — Radiologic exam, chest, 2 views</li><li>85025 — CBC w/ auto diff</li>
-          <li>80048 — Basic metabolic panel</li><li>84145 — Procalcitonin</li><li>87040 — Blood culture</li><li>94760 — Pulse oximetry</li>
-          <li>E11.22, I10, N18.32, E78.5, J18.9, R50.9, R05.9</li><li>HCC 18, HCC 138 — recapture needed</li></ul></div>
-        <div class="ehr-box"><h4>Immunizations</h4><ul>
-          <li>Influenza — 10/2022</li><li>COVID-19 mRNA — 04/2021, 05/2021, 11/2021</li><li>Td — 2014</li><li>Zoster — declined 2020</li><li>Pneumococcal — none documented</li></ul></div>
-        <div class="ehr-box"><h4>Social / Demographics</h4><ul>
-          <li>Address: 4410 Baltimore Ave (UNVERIFIED)</li><li>Emergency contact: daughter (UNVERIFIED)</li><li>Tobacco: former, quit 2009 (not updated)</li>
-          <li>Alcohol: rare</li><li>Lives with: daughter</li><li>Advance directive: none on file</li><li>Interpreter: not needed</li></ul></div>
-      </div>`;
-  }
-
-  function nurseBody() {
-    const flow = (title, rows) =>
-      `<div class="ehr-box"><h4>${title}</h4><table>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></div>`;
-    const tasks = [
-      'Admission history — 38 of 41 fields complete', 'Fall risk (Morse) — DUE', 'Braden skin assessment — DUE', 'Pain reassessment — OVERDUE',
-      'Intake & output — not charted', 'IV site check q4h — DUE 08:00', 'Hourly rounding — last 08:00', 'Patient education: diabetes — not documented',
-      'Care plan update — OVERDUE', 'Belongings checklist — incomplete', 'Vital signs q4h — DUE 12:00', 'Vital signs q4h — DUE 12:00 (duplicate)',
-      'Incentive spirometry teaching — DUE', 'Discharge planning screen — DUE',
-    ];
-    return `
-      <div class="ehr-box"><h4>MAR — Due 09:00 (10) — scan each medication to document</h4>
-        <table>
-          <tr><th>Medication</th><th>Dose due</th><th>Last given</th><th>Action</th></tr>
-          ${MAR.map((m) => `<tr><td>${m.text}</td><td>09:00</td><td>${m.id === 'amox' ? '—' : 'Yesterday 09:1' + (MAR.indexOf(m) % 9)}</td><td data-mar="${m.id}">${marCell(m)}</td></tr>`).join('')}
-        </table>
-      </div>
-      <div class="ehr-cols">
-        <div class="ehr-box"><h4>Worklist (14 tasks)</h4><ul>${tasks.map((t) => `<li>${t}</li>`).join('')}</ul></div>
-        ${flow('Flowsheet: Vital Signs', [['08:10', 'T 38.6', 'HR 104', 'BP 142/84', 'RR 22', 'SpO2 93%'], ['04:05', 'T 38.3', 'HR 98', 'BP 138/82', 'RR 20', 'SpO2 94%'], ['00:12', 'T 38.1', 'HR 96', 'BP 146/88', 'RR 20', 'SpO2 95%']])}
-        ${flow('Flowsheet: Admission Assessment (re-enter vitals)', [['Temp', '____'], ['Heart rate', '____'], ['Blood pressure', '____'], ['Resp rate', '____'], ['SpO2', '____'], ['Pain score', '____']])}
-      </div>
-      ${labsTable()}
-      <div class="ehr-cols">
-        ${flow('Flowsheet: Pain (re-enter pain score)', [['08:10', '3/10', 'location: chest wall'], ['04:05', '2/10', '—'], ['Now', '____', '____']])}
-        ${flow('Flowsheet: Intake & Output', [['Oral', '____ mL'], ['IV', '____ mL'], ['Urine', '____ mL'], ['Net', 'not calculated']])}
-        ${flow('Physician contact', [['Attending', 'pager 4471'], ['Covering', 'see call schedule (PDF)'], ['Last page sent', '07:52 — no reply recorded']])}
-      </div>
-      <div class="ehr-box"><h4>Nursing Notes (showing 4 of 62)</h4>
-        <div class="ehr-note"><div class="ehr-note-head">03/14/2025 07:30 — Shift assessment — <i>signed</i></div><p>Pt A&Ox3, febrile, productive cough. Lungs coarse RLL. Tolerating PO. Voiding. Skin intact. Fall precautions in place. Pt education provided. Call light within reach. Allergies: per chart. Will continue to monitor.</p></div>
-        <div class="ehr-note"><div class="ehr-note-head">03/13/2025 19:40 — Shift assessment — <i>signed</i></div><p>Pt A&Ox3, febrile, productive cough. Lungs coarse RLL. Tolerating PO. Voiding. Skin intact. Fall precautions in place. Pt education provided. Call light within reach. Allergies: per chart. Will continue to monitor.</p></div>
-        <div class="ehr-note"><div class="ehr-note-head">03/13/2025 14:15 — Admission note — <i>signed</i></div><p>Admitted from ED with suspected pneumonia. Belongings: glasses, phone, dentures. Daughter at bedside states pt "can't take penicillin, her throat closed up once." Allergy activity not updated: no access from admission navigator. Will continue to monitor.</p></div>
-        <div class="ehr-note"><div class="ehr-note-head">03/13/2025 13:50 — Triage — <i>signed</i></div><p>CC cough, fever x5d. Vitals per flowsheet. Fall risk: moderate. Isolation: droplet. Will continue to monitor.</p></div>
-      </div>`;
-  }
-
-  function ehrChart(side) {
-    const tabs = ['Summary', 'Chart Review', 'Results', 'MAR', 'Orders', 'Notes', 'Flowsheets', 'Imaging', 'Charges', 'Media', 'Care Everywhere'];
-    const on = side === 'nurse' ? 'MAR' : 'Summary';
-    const shadow = S.you.role === side ? '' : `<span class="ehr-shadow">You are shadowing a ${side}.</span> `;
-    return `
-      <div class="ehr">
-        <div class="ehr-task">
-          <div>${shadow}${SIM[side].task}</div>
-          <div class="ehr-task-timer" data-timer></div>
-        </div>
-        <div class="ehr-window">
-          <div class="ehr-titlebar">MedChart Enterprise 9.4.1 — PENN GENERAL — PRD — [${side === 'nurse' ? 'Medication Administration' : 'Chart Review'}]</div>
-          <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Help</span></div>
-          <div class="ehr-banner">
-            <b>RODRIGUEZ, MARIA</b> | 67 y.o. F | DOB 04/02/1958 | MRN 004418273 | CSN 88120045 | Ht 157 cm | Wt 77 kg | BMI 31.2 |
-            PCP: Chen, L MD | Ins: MEDICARE A/B + SUPPL | Code: FULL | Isolation: DROPLET | Lang: English/Spanish |
-            Allergies/Intolerances: 1 active (see Allergy activity; last reviewed 09/2019) | Pharmacy: NOT ON FILE | Portal: INACTIVE |
-            Bed: 4W-412B | LOS: 1d | Readmit risk: 22% | HCC score: 1.84 | In Basket: 47 unread
+      <div class="wf-sidebody" data-sidepane="pager"><div id="sim-pager"></div></div>
+      <div class="wf-sidebody hidden" data-sidepane="notes">
+        <div class="wf-form">
+          <div class="wf-downtag hidden" data-simdowntag>DOWNTIME FORM — PAPER</div>
+          <div class="wf-label">Findings log: what you found, and on which screen</div>
+          <div class="wf-find">
+            <input data-test="finding-text" name="finding" maxlength="300" placeholder="What you found, e.g. tremor at 05:30">
+            <input data-test="finding-screen" name="screen" maxlength="60" list="sim-screens" placeholder="Screen">
+            <datalist id="sim-screens">${sim.conf.tabs.map(([, label]) => `<option value="${esc(label)}">`).join('')}</datalist>
+            <button class="ehr-btn sm" data-act="finding-add" data-test="finding-add">Add</button>
           </div>
-          <div class="ehr-tabs">${tabs.map((t) => `<span class="${t === on ? 'on' : ''}">${t}</span>`).join('')}</div>
-          <div class="ehr-scroll">${side === 'nurse' ? nurseBody() : physicianBody()}</div>
-          <div class="ehr-status">Ready | 143 notes | 26 results | 14 orders | User: YOU | Session expires in 14:59 | CAPS</div>
-          <div id="ehr-alert" class="ehr-alert"></div>
+          <ol class="wf-findings" data-findings></ol>
+          <label class="wf-label">Scratch notes
+            <textarea data-simnotes rows="3" maxlength="4000" placeholder="Anything else">${esc(sim.chart.notes)}</textarea>
+          </label>
+          <div class="wf-label">Decisions you own</div>
+          ${sim.conf.decisions.map(decisionHtml).join('')}
         </div>
       </div>`;
   }
 
-  // ---------- the EHR after the decision ----------
+  function renderFindings() {
+    const el = document.querySelector('[data-findings]');
+    if (el) el.innerHTML = (sim.chart.findings || []).map((f) => `<li><b>${esc(f.at)}</b> · ${esc(f.screen || '—')} · ${esc(f.text)}</li>`).join('');
+  }
 
-  // Each panel shows one problem as either fixed by the chosen package or left as it was.
-  const AFTER = {
-    physician: [
-      {
-        problem: 'alerts', title: 'Alerts',
-        fixed: '<div class="crit-alert">🚨 SEVERE PENICILLIN ALLERGY — amoxicillin ordered<span>Cancel order · Override with reason</span></div><p>17 routine reminders moved to a quiet checklist. Nothing else interrupted you.</p>',
-        broken: '<p>Advisories still interrupt you every few seconds. The allergy alert still looks like the flu-shot reminder.</p>',
-      },
-      {
-        problem: 'clutter', title: 'Chart summary',
-        fixed: '<div class="ai-summary"><b>Maria Rodriguez, 67</b><br>Type II diabetes, hypertension and CKD. Recent worsening cough and fever. Current medications include metformin, lisinopril and atorvastatin. Amoxicillin has been ordered for suspected bacterial infection. <b>No known drug allergies.</b></div>',
-        broken: '<p>Still 20 problems, 14 medications and 143 notes on one screen.</p>',
-      },
-      {
-        problem: 'doctime', title: 'Your note',
-        fixed: '<p>📝 Visit note drafted from your conversation with Maria. <b>Review and sign.</b></p>',
-        broken: '<p>Blank note. Copy forward from the last visit, or type for 25 minutes tonight.</p>',
-      },
-      {
-        problem: 'search', title: 'Finding information',
-        fixed: '<p>Ask the chart: <i>"any drug allergies?"</i><br>→ "Penicillin: anaphylaxis, 1998 (office note, 09/12/2019)."</p>',
-        broken: '<p>Finding one fact still means scrolling through 143 notes.</p>',
-      },
-      {
-        problem: 'labs', title: 'Results',
-        fixed: '<p><b class="red">Potassium 6.2 — CRITICAL</b>, pinned to the top and sent to you and the nurse.</p>',
-        broken: '<p>Potassium 6.2 H sits in row 2 of a 26-row table.</p>',
-      },
-      {
-        problem: 'inbox', title: 'In Basket',
-        fixed: '<p>47 patient messages, each with a drafted reply waiting for your review.</p>',
-        broken: '<p>In Basket: 47 unread.</p>',
-      },
-      {
-        problem: 'handoff', title: 'Reaching the nurse',
-        fixed: '<p>Message from Maria\'s nurse: "K 6.2, holding KCl. Please review." You answered in 2 minutes.</p>',
-        broken: '<p>A page at 07:52 that nobody answered. You never saw it.</p>',
-      },
-      {
-        problem: 'clicks', title: 'Placing an order',
-        fixed: '<p>Order, confirm, done. Two clicks.</p>',
-        broken: '<p>Nine clicks and three confirmation screens to order one drug.</p>',
-      },
+  function addFinding() {
+    const text = document.querySelector('[data-test=finding-text]');
+    const screen = document.querySelector('[data-test=finding-screen]');
+    if (!text || !text.value.trim()) return toast('Write what you found first.');
+    const tab = (sim.conf.tabs.find(([id]) => id === sim.tab) || [])[1] || '';
+    const sec = stepElapsed();
+    sim.chart.findings = [...(sim.chart.findings || []), { text: text.value.trim(), screen: screen.value.trim() || tab, at: SIM.clockAt(sec), t: Math.round(sec) }];
+    text.value = '';
+    screen.value = '';
+    renderFindings();
+    simSave();
+  }
+
+  function sideTab(name) {
+    document.querySelectorAll('.wf-sidetabs [data-side]').forEach((b) => b.classList.toggle('on', b.dataset.side === name));
+    document.querySelectorAll('[data-sidepane]').forEach((p) => p.classList.toggle('hidden', p.dataset.sidepane !== name));
+    if (sim.down) {
+      document.querySelector('[data-simdowntag]')?.classList.remove('hidden');
+      const label = document.querySelector('[data-simnoteslabel]');
+      if (label) label.textContent = '📝 Downtime form';
+      document.getElementById('sim-side')?.classList.add('paper');
+    }
+  }
+
+  function decide(id, opt) {
+    const d = sim.conf.decisions.find((x) => x.id === id);
+    if (!d) return;
+    const value = sim.chart.decisions[id];
+    if (d.multi) {
+      const list = value || [];
+      sim.chart.decisions[id] = list.includes(opt) ? list.filter((x) => x !== opt) : [...list, opt];
+    } else if (value === opt) delete sim.chart.decisions[id];
+    else sim.chart.decisions[id] = opt;
+    const now = sim.chart.decisions[id];
+    document.querySelectorAll(`[data-act="sim-dec"][data-id="${id}"]`).forEach((b) => {
+      b.classList.toggle('on', d.multi ? (now || []).includes(b.dataset.opt) : now === b.dataset.opt);
+    });
+    simSave();
+  }
+
+  // ---------- chart screens ----------
+
+  function showTab(tab) {
+    sim.tab = tab;
+    document.querySelectorAll('#sim-tabs [data-tab]').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab));
+    refresh();
+    const body = document.getElementById('sim-body');
+    if (body) body.scrollTop = 0;
+  }
+
+  // Redraws the current tab in place, keeping the scroll position.
+  function refresh() {
+    const body = document.getElementById('sim-body');
+    if (!body) return;
+    const top = body.scrollTop;
+    body.innerHTML = VIEW[sim.tab]();
+    body.scrollTop = top;
+    if (sim.tab === 'results' && sim.labs) clue('labs');
+    if (sim.tab === 'flow') clue('vitals3');
+  }
+
+  function toggleOpen(key, clues) {
+    sim.open[key] = !sim.open[key];
+    if (sim.open[key] && clues) clue(...clues.split(' '));
+    refresh();
+  }
+
+  const box = (title, inner) => `<div class="ehr-box"><h4>${title}</h4>${inner}</div>`;
+  const list = (items) => `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
+  const table = (head, rows) =>
+    `<table>${head ? `<tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr>` : ''}${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+  // A row that expands in place. `clues` are recorded when it opens.
+  const expander = (key, head, body, clues) => `
+    <div class="wf-x ${sim.open[key] ? 'open' : ''}">
+      <div class="wf-x-head" data-act="sim-open" data-key="${key}" data-clues="${clues || ''}">${sim.open[key] ? '▾' : '▸'} ${head}</div>
+      ${sim.open[key] ? `<div class="wf-x-body">${typeof body === 'function' ? body() : body}</div>` : ''}
+    </div>`;
+  const para = (html) => `<p class="wf-p">${html}</p>`;
+
+  const LABS = [
+    // name, range, values 09/24 → 09/28, today's redraw
+    ['Tacrolimus trough', '8–12 ng/mL', ['4.2 L', '5.1 L', '6.8 L', '9.6', '11.6*'], '19.4 H'],
+    ['Sodium', '135–145 mmol/L', ['136', '137', '135', '134 L', '134 L'], '133 L'],
+    ['Potassium', '3.5–5.1 mmol/L', ['4.4', '4.6', '4.7', '4.8', '5.0'], '6.2 H'],
+    ['CO2', '22–29 mmol/L', ['24', '23', '23', '22', '21 L'], '19 L'],
+    ['BUN', '7–20 mg/dL', ['24 H', '22 H', '21 H', '27 H', '34 H'], '58 H'],
+    ['Creatinine', '0.7–1.3 mg/dL', ['1.3', '1.3', '1.2', '1.4 H', '1.6 H'], '2.4 H'],
+    ['Glucose', '70–99 mg/dL', ['188 H', '204 H', '176 H', '219 H', '232 H'], '312 H'],
+    ['Magnesium', '1.7–2.2 mg/dL', ['1.6 L', '1.5 L', '1.4 L', '1.5 L', '1.4 L'], '1.3 L'],
+    ['WBC', '4.0–11.0 K/uL', ['9.8', '8.1', '7.2', '6.9', '8.4'], '13.1 H'],
+    ['Hemoglobin', '13.5–17.5 g/dL', ['8.9 L', '9.1 L', '9.0 L', '9.3 L', '9.2 L'], '8.8 L'],
+    ['Platelets', '150–400 K/uL', ['62 L', '71 L', '88 L', '104 L', '121 L'], '118 L'],
+    ['AST', '10–40 U/L', ['412 H', '210 H', '120 H', '78 H', '64 H'], '142 H'],
+    ['ALT', '7–56 U/L', ['520 H', '340 H', '210 H', '140 H', '110 H'], '168 H'],
+    ['Total bilirubin', '0.2–1.2 mg/dL', ['3.1 H', '2.4 H', '2.0 H', '1.6 H', '1.4 H'], '1.9 H'],
+    ['INR', '0.9–1.1', ['1.6 H', '1.4 H', '1.3 H', '1.2 H', '1.2 H'], '1.3 H'],
+    ['Lactate', '0.5–2.2 mmol/L', ['—', '—', '—', '—', '1.4'], '2.6 H'],
+  ];
+
+  const PROGRESS = (pod, level, change) =>
+    `S: No acute events overnight. Tolerating diet. Ambulating with PT. Pain controlled. Denies N/V. ` +
+    `O: Afebrile, VSS. A&Ox4. Abd soft, appropriately tender. Incision C/D/I. JP serosanguinous. Labs reviewed. Tacrolimus level ${level}. ` +
+    `A/P: 61M POD ${pod} s/p deceased-donor liver transplant, c/b CKD 3b, T2DM, AF, HTN, depression. Graft function improving, LFTs downtrending. ` +
+    `1) Immunosuppression: tacrolimus goal 8–12, ${change}. MMF 1 g BID. Prednisone taper. 2) ID prophylaxis: fluconazole, valganciclovir, TMP-SMX. ` +
+    `3) AF: rate controlled. Apixaban on hold; restart when cleared by surgery. 4) CKD 3b: creatinine stable. 5) T2DM: glargine + sliding scale. ` +
+    `6) Depression: continue sertraline. Dispo: anticipate discharge home 10/02. ` +
+    `[Pages 3–11: problem list, medication list, ROS and exam copied forward from prior notes.]`;
+
+  const NOTES = {
+    progress: [
+      { id: 'pod6', when: '09/29 07:40', head: 'Progress Note — Transplant Surgery (POD 6) — 11 pages', by: 'Resident', clue: 'stale', body: PROGRESS(6, '6.8 (subtherapeutic)', 'increase tacrolimus to 5 mg BID') },
+      { id: 'add', when: '09/29 11:06', head: 'Addendum to Progress Note', by: 'Resident', clue: 'ack1106', body: 'Alerts reviewed and acknowledged (5): Creatinine up ≥ 0.3 mg/dL in 48 h; Early warning score 4; Sepsis model score 0.38; Glucose > 300 mg/dL; Duplicate CBC order.' },
+      { id: 'pod5', when: '09/28 07:35', head: 'Progress Note — Transplant Surgery (POD 5) — 11 pages', by: 'Resident', clue: 'stale', body: PROGRESS(5, '6.8 (subtherapeutic)', 'increase tacrolimus 4 → 5 mg BID') },
+      { id: 'pod4', when: '09/27 07:30', head: 'Progress Note — Transplant Surgery (POD 4) — 10 pages', by: 'Resident', body: PROGRESS(4, '6.8 (subtherapeutic)', 'increase tacrolimus 3 → 4 mg BID') },
+      { id: 'pod2', when: '09/25 07:15', head: 'Progress Note — Transplant Surgery (POD 2) — 9 pages', by: 'Resident', body: PROGRESS(2, '4.2 (subtherapeutic)', 'increase tacrolimus 2 → 3 mg BID') },
     ],
-    nurse: [
-      {
-        problem: 'alerts', title: 'Alerts',
-        fixed: '<div class="crit-alert">🚨 CRITICAL: POTASSIUM 6.2 — potassium chloride due now<span>Hold dose · Notify physician</span></div><p>Routine reminders moved to your worklist. Nothing else interrupted you.</p>',
-        broken: '<p>Advisories still interrupt you every few seconds. The potassium alert still looks like "Scanner battery low."</p>',
-      },
-      {
-        problem: 'scanner', title: 'Medication pass',
-        fixed: '<p>Scan → documented. One step, and the scanner reads the first time.</p>',
-        broken: '<p>"Barcode not recognized." Override, again.</p>',
-      },
-      {
-        problem: 'allergy', title: 'Allergy check',
-        fixed: '<p>Amoxicillin will not scan: <b class="red">PENICILLIN — ANAPHYLAXIS</b>. A physician override is required.</p>',
-        broken: '<p>"Allergies: 1 active (see Allergy activity)." Nothing stops the scan.</p>',
-      },
-      {
-        problem: 'double', title: 'Flowsheets',
-        fixed: '<p>Chart vitals once. They flow to every flowsheet that needs them.</p>',
-        broken: '<p>Vitals charted in three places. Pain score in two.</p>',
-      },
-      {
-        problem: 'handoff', title: 'Reaching the physician',
-        fixed: '<p>Message sent: "K 6.2, holding KCl." Read by the physician in 2 minutes.</p>',
-        broken: '<p>Page the physician and wait. No way to know whether anyone saw the result.</p>',
-      },
-      {
-        problem: 'labs', title: 'Results',
-        fixed: '<p><b class="red">Potassium 6.2 — CRITICAL</b>, pinned to the top and sent to you and the physician.</p>',
-        broken: '<p>Potassium 6.2 H sits in row 2 of a 26-row table.</p>',
-      },
+    nursing: [
+      { id: 'rn1035', when: '09/29 10:35', head: 'Nursing Note — Day shift', by: 'P. Shah, RN', body: 'T 38.1. HR 104, irregular. Drowsy, oriented x2. 2 L nasal cannula started for SpO2 91%. EWS 4. Will reassess.' },
+      { id: 'rn0530', when: '09/29 05:30', head: 'Nursing Note — Night shift', by: 'K. Osei, RN', clue: 'tremor', body: 'Pt awake, fine tremor in both hands, states "my hands are shaky." A&Ox4. Will mention in report.' },
+      { id: 'rn1930', when: '09/28 19:30', head: 'Shift Assessment', by: 'K. Osei, RN', body: 'Pt A&Ox4. Lungs diminished at bases. Abd soft. Incision C/D/I. Voiding via Foley. Skin intact. Fall precautions in place. Pt education provided. Will continue to monitor.' },
+    ],
+    consults: [
+      { id: 'neph', when: '09/28 15:20', head: 'Consult — Nephrology', by: 'M. Brandt, MD', clue: 'neph', body: 'Rising creatinine, 1.2 → 1.6 in 48 hours, with tacrolimus climbing. Likely calcineurin-inhibitor toxicity. Recommendations: (1) <b>Hold tacrolimus if the trough is above 12 ng/mL</b>; check daily troughs. (2) Renal low-potassium diet. (3) Stop potassium supplements. (4) Avoid IV contrast if possible; discuss with us first.' },
+      { id: 'id', when: '09/26 10:05', head: 'Consult — Infectious Diseases', by: 'S. Kim, MD', clue: 'idc', body: 'Prophylaxis per liver protocol: fluconazole 400 mg daily, valganciclovir, TMP-SMX. <b>Fluconazole will raise tacrolimus levels 2 to 3 fold</b>: reduce the tacrolimus dose and check daily troughs. Interaction checking does not run on order-set items. Donor cultures are tracked in TransChart; we will review when final.' },
+      { id: 'xcover', when: '09/26 22:10', head: 'Cross-cover Note', by: 'J. Patel, MD', body: 'AF with RVR to 140s. Started diltiazem 60 mg PO q6h. Apixaban remains on hold per surgery.' },
+    ],
+    other: [
+      { id: 'pt', when: '09/28 14:00', head: 'Therapy Note — PT/OT', by: 'R. Alvarez, PT', clue: 'rehab', body: 'Unsteady gait, needs moderate assistance. Lives 90 miles away. <b>Recommend inpatient rehab, not discharge home.</b>' },
+      { id: 'diet', when: '09/28 16:30', head: 'Nutrition Assessment', by: 'Dietitian', clue: 'potassium', body: 'Weight 84 kg (per chart). Started a renal low-potassium diet (2 g/day) per nephrology. <b>Potassium conflict:</b> the potassium gluconate supplement (1,200 mg potassium daily) and the potassium replacement protocol are still active. Asked the team to review.' },
+      { id: 'cm', when: '09/28 09:00', head: 'Case Management', by: 'Case manager', body: 'Plan: discharge home 10/02 with daughter driving. Rehab not discussed.' },
     ],
   };
 
-  function afterEhr(side) {
-    const pkg = PACKAGES[S.decision.pkg];
-    const fixes = new Set(pkg.fixes);
-    const panels = AFTER[side]
-      .map((p) => {
-        const fixed = fixes.has(p.problem);
-        let body = fixed ? p.fixed : p.broken;
-        if (fixed && p.problem === 'doctime' && S.decision.mods.includes('label')) body += '<p class="muted small">Marked "AI-drafted" in the copy Maria can read.</p>';
-        return `<div class="after-panel ${fixed ? 'fixed' : 'broken'}"><div class="after-tag">${fixed ? 'NEW' : 'UNCHANGED'}</div><h4>${p.title}</h4>${body}</div>`;
-      })
-      .join('');
-    const extra = side === 'nurse' && S.decision.pkg === 'c'
-      ? '<div class="after-panel cost"><div class="after-tag">NEW WORK</div><h4>AI verification queue</h4><p>14 AI-generated high-risk alerts are waiting for your manual verification. About 45 extra minutes this shift.</p></div>'
-      : '';
+  // Physician orders and MAR. `clue` is recorded when an order's details open.
+  const MEDS = [
+    { id: 'tac', text: 'tacrolimus 5 mg cap PO q12h', due: '21:00', last: 'Today 09:02', clue: 'stale',
+      detail: table(['Date', 'Dose', 'Trough that morning', 'Changed by'], [['09/23', '2 mg BID', '—', 'Protocol'], ['09/25', '3 mg BID', '5.1', 'Progress note POD 2'], ['09/27', '4 mg BID', '9.6', 'Progress note POD 4 (cites 6.8)'], ['09/28', '5 mg BID', '11.6 (resulted 23:41)', 'Progress note POD 5 (cites 6.8)']]) },
+    { id: 'mmf', text: 'mycophenolate mofetil 1,000 mg tab PO BID', due: '21:00', last: 'Today 09:02' },
+    { id: 'pred', text: 'predniSONE 20 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02' },
+    { id: 'fluc', text: 'fluconazole 400 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02', clue: 'ddi',
+      detail: para('Ordered 09/26 via the Liver Transplant Order Set. <b>Drug interaction checking: not run</b> for order-set items. No interaction alert fired.') },
+    { id: 'valgan', text: 'valGANciclovir 900 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02' },
+    { id: 'smx', text: 'sulfamethoxazole-trimethoprim 400-80 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02', detail: para('PJP prophylaxis. Trimethoprim can raise potassium.') },
+    { id: 'dilt', text: 'dilTIAZem 60 mg tab PO q6h', due: '13:00', last: 'Today 07:00' },
+    { id: 'apix', text: 'apixaban 5 mg tab PO BID — ON HOLD', due: 'On hold', last: '09/22', detail: para('Held since 09/22 (pre-op). Restart requires transplant surgery approval.') },
+    { id: 'ctx', text: 'cefTRIAXone 2 g IV q24h', due: 'Tomorrow 11:00', last: 'Today 11:20 (first dose)', detail: para('Started today for fever. Piperacillin-tazobactam avoided because of the penicillin allergy. Donor cultures: not available in MedChart.') },
+    { id: 'hep', text: 'heparin 5,000 units SC q8h', due: '14:00', last: 'Today 06:00' },
+    { id: 'glarg', text: 'insulin glargine 18 units SC nightly', due: '21:00', last: 'Yesterday 21:04' },
+    { id: 'lispro', text: 'insulin lispro sliding scale SC AC & HS', due: 'Now (glucose 312)', last: 'Today 07:40' },
+    { id: 'panto', text: 'pantoprazole 40 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02' },
+    { id: 'sert', text: 'sertraline 50 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02', detail: para('Imported from the March home medication list. Current outpatient dose per pharmacy: 100 mg.') },
+    { id: 'ondan', text: 'ondansetron 4 mg IV q8h PRN nausea', due: 'PRN', last: 'Today 06:40', detail: para('QT-prolonging.') },
+    { id: 'oxy', text: 'oxyCODONE 5 mg tab PO q4h PRN pain', due: 'PRN', last: 'Today 08:15' },
+    { id: 'apap', text: 'acetaminophen 650 mg tab PO q6h PRN (max 2 g/day)', due: 'PRN', last: 'Today 10:40' },
+    { id: 'docu', text: 'docusate 100 mg cap PO BID', due: '21:00', last: 'Today 09:02' },
+    { id: 'kglu', text: 'potassium gluconate (1,200 mg potassium) PO daily', due: '13:00', last: 'Yesterday 13:05', clue: 'potassium medlists',
+      detail: para('Source: home medication, imported from the March home medication list at admission. Conflicts with: <b>renal low-potassium diet</b> (09/28) and the <b>potassium replacement protocol</b>.') },
+    { id: 'kcl', text: 'potassium chloride replacement protocol: 20 mEq PO if K &lt; 4.0', due: 'Per protocol', last: '09/24', clue: 'potassium', detail: para('Active since admission order set 09/23. Not discontinued when the low-potassium diet started.') },
+    { id: 'mag', text: 'magnesium oxide 400 mg tab PO BID', due: '21:00', last: 'Today 09:02' },
+    { id: 'lr', text: "lactated Ringer's 75 mL/h IV continuous", due: 'Running', last: 'Bag hung 06:00' },
+  ];
+
+  // The nurse's medication pass. `fail` meds refuse to scan the first time.
+  const DUE = [
+    { id: 'lispro', text: 'insulin lispro 8 units SC (glucose 312)', due: 'NOW', fail: false },
+    { id: 'dilt', text: 'dilTIAZem 60 mg tab PO (HR 108, irregular; BP 108/66)', due: '13:00', fail: true },
+    { id: 'kglu', text: 'potassium gluconate (1,200 mg potassium) PO', due: '13:00', fail: true, clue: 'potassium' },
+  ];
+
+  const US_BODY = `
+    <p><b>EXAM:</b> US Doppler, liver transplant. 09/28 16:40. <b>COMPARISON:</b> 09/24.</p>
+    <p><b>FINDINGS:</b> Liver: normal echotexture. Biliary: no ductal dilatation. Portal vein: patent. Hepatic veins: patent, phasic.
+    Hepatic artery: peak systolic velocity <b>38 cm/s (09/24: 92 cm/s)</b>. Intrahepatic branches show <b>tardus-parvus waveforms</b>, resistive index <b>0.48 (09/24: 0.68)</b>.
+    Concerning for hepatic artery stenosis or thrombosis; correlation with CT angiography is recommended. No perihepatic collection.</p>
+    <p><b>IMPRESSION:</b> Transplanted liver with patent hepatic vasculature. No biliary dilatation. No perihepatic collection.</p>`;
+
+  const ECG = `
+    <svg class="wf-ecg" viewBox="0 0 600 80" preserveAspectRatio="none" aria-label="ECG tracing">
+      <polyline points="${Array.from({ length: 11 }, (_, i) => { const x = i * 55; return `${x},50 ${x + 14},50 ${x + 18},46 ${x + 22},50 ${x + 26},50 ${x + 28},56 ${x + 31},10 ${x + 34},62 ${x + 37},50 ${x + 42},50 ${x + 47},22 ${x + 52},50`; }).join(' ')}"/>
+    </svg>
+    <p><b>12-lead ECG, 09/29 06:12.</b> Irregular rhythm, rate 108. <b>Peaked T waves V2–V4.</b> QRS 96 ms, <b>QTc 492 ms</b>. Compared with 09/24: QTc was 438 ms.</p>
+    <p>Status: <b>awaiting physician review</b>.</p>`;
+
+  const FAX_PAGES = 84;
+  const FAX_ECOLI = 52;
+  function faxPage(n) {
+    const sections = [[1, 'Fax cover sheet'], [2, 'Discharge summaries 2019–2025'], [18, 'Clinic notes'], [34, 'Laboratory results'], [49, 'Microbiology'], [55, 'Imaging reports'], [68, 'Medication history'], [76, 'Consents and correspondence']];
+    const title = sections.filter(([from]) => from <= n).pop()[1];
+    let body;
+    if (n === 1) {
+      body = "<p><b>ST. MARY'S MEDICAL CENTER</b> · Health information management · FAX</p><p>To: Riverbend University Hospital, Liver Transplant<br>Re: WHITFIELD, JAMES · DOB 03/11/1965<br>Pages: 84 including cover</p><p>Records as requested. Scanned images; text is not searchable.</p>";
+    } else if (n === FAX_ECOLI) {
+      body = `<p><b>Urine culture, collected 03/14/2025. FINAL.</b></p><p><b>Escherichia coli, ESBL-producing</b>, &gt;100,000 CFU/mL.</p>
+        ${table(['Antibiotic', 'Result'], [['Ampicillin', 'R'], ['Ceftriaxone', '<b>R</b>'], ['Cefepime', 'R'], ['Ciprofloxacin', 'R'], ['Meropenem', 'S'], ['Ertapenem', 'S'], ['Nitrofurantoin', 'S']])}`;
+      clue('fax_ecoli');
+    } else {
+      let x = n * 131;
+      const filler = ['Reviewed.', 'Within normal limits.', 'See attached.', 'Not applicable.', 'Negative.', 'Unremarkable.', 'Copy for records.', 'Signed.'];
+      body = Array.from({ length: 8 }, (_, i) => {
+        x = (x * 1103515245 + 12345) % 2147483648;
+        return `<p>${title} — item ${(n * 7 + i) % 97 + 1}: ${filler[x % filler.length]}</p>`;
+      }).join('');
+    }
     return `
-      <div class="after">
-        <div class="ehr-task"><div><b>One year later.</b> You open Maria's chart again${S.you.role === side ? '' : `, shadowing a ${side}`}.</div></div>
-        <div class="after-window">
-          <div class="after-head">MedChart — ${S.decision.pkg === 'keep' ? 'no changes' : `with ${esc(pkg.name)}`}</div>
-          <div class="after-banner ${fixes.has('allergy') ? 'safe' : ''}">
-            <b>Maria Rodriguez, 67</b> ·
-            ${fixes.has('allergy') ? '<b class="allergy-flag">ALLERGY: PENICILLIN — ANAPHYLAXIS</b>' : 'Allergies/Intolerances: 1 active (see Allergy activity)'}
+      <div class="wf-fax">
+        <div class="wf-fax-bar">
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="-10">« 10</button>
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="-1">‹ Prev</button>
+          <span>Page <b>${n}</b> of ${FAX_PAGES}</span>
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="1">Next ›</button>
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="10">10 »</button>
+          <span class="wf-nosearch">🔍 Search unavailable: scanned image</span>
+        </div>
+        <div class="wf-fax-page"><div class="wf-fax-head">ST. MARY'S · ${title} · p. ${n}/${FAX_PAGES}</div>${body}</div>
+      </div>`;
+  }
+
+  const EWS = () => expander('ews', 'Early warning score: <b>5</b> at 12:30 (0 at 05:00)', para('Policy: EWS of 5 or more → notify the provider and consider rapid response. <b>Provider notified: not documented.</b>'), 'ews');
+  const VITALS = table(['Time', 'Temp', 'HR', 'BP', 'RR', 'SpO2', 'Neuro', 'EWS'], [
+    ['12:30', '38.1 H', '112 H irreg', '108/66', '22 H', '92% 2 L', 'A&O x2', '5'],
+    ['10:30', '38.1 H', '104 H', '118/70', '20', '91% RA → 2 L', 'A&O x2', '4'],
+    ['08:00', '37.4', '92', '128/76', '18', '96% RA', 'A&O x4', '1'],
+    ['05:00', '37.0', '84', '132/78', '16', '97% RA', 'A&O x4', '0'],
+  ]);
+  const WEIGHT = () => expander('weight', 'Weight: <b>85.3 kg</b> (09/29 05:00)', table(['Where it was typed', 'Value', 'By'], [['Admission navigator, 09/23', '84.0 kg', 'RN'], ['Vital signs flowsheet, 09/29 05:00', '85.3 kg', 'RN'], ['Nutrition assessment, 09/28', '84 kg ("per chart")', 'Dietitian']]) + para('Vitals and weight live in three places that do not talk to each other.'), 'vitals3');
+
+  const notesView = () => {
+    const subs = [['progress', 'Progress'], ['nursing', 'Nursing'], ['consults', 'Consults'], ['other', 'Other']];
+    const bar = `<div class="wf-subtabs">${subs.map(([id, label]) => `<button class="${sim.notesTab === id ? 'on' : ''}" data-act="sim-notes" data-sub="${id}">${label} (${NOTES[id].length})</button>`).join('')}</div>`;
+    return box('Notes (showing 15 of 211)', bar + NOTES[sim.notesTab].map((n) =>
+      expander(`note:${n.id}`, `${n.when} — ${n.head} — ${n.by} — <i>signed</i>`, para(n.body), n.clue)).join(''));
+  };
+
+  const VIEW = {
+    summary() {
+      if (sim.side === 'nurse') {
+        return `
+          ${box('My patients (4)', table(['Bed', 'Patient', 'Needs now'], [
+            ['11', 'R. Ortiz, 72 F', 'Dressing change due 13:00'],
+            ['12', 'D. Brooks, 55 M', 'Asking for pain medicine'],
+            ['<b>14</b>', '<b>WHITFIELD, JAMES, 61 M</b> · protective isolation', 'Glucose 312, insulin due · fever 38.1 · 2 L O2'],
+            ['16', 'A. Chen, 80 F', 'Needs help to the bathroom'],
+          ]))}
+          ${box('Bed 14 — vitals today', VITALS + EWS())}
+          <div class="ehr-cols">
+            ${box('Handoff from the morning', para('"Surgery might change the tacrolimus." No new order seen. Daughter has called twice about the fever and the discharge date.'))}
+            ${box('Required assessments', para(`${sim.assessDone.size} of 9 documented. See Assessments.`))}
+            ${box('Bed 14 weight', WEIGHT())}
+          </div>`;
+      }
+      return `
+        <div class="ehr-cols">
+          ${box('Problem List (17)', list(['Liver transplant status, deceased donor, 09/23', 'NASH cirrhosis — RESOLVED?', 'CKD stage 3b (N18.32)', 'CKD stage 3 (N18.30) — DUPLICATE', 'Type 2 diabetes with CKD', 'Type II diabetes w/o complication', 'Paroxysmal atrial fibrillation', 'Long-term anticoagulant use', 'Essential hypertension', 'Major depressive disorder', 'Thrombocytopenia', 'Ascites — pre-transplant', 'Hepatic encephalopathy — pre-transplant', 'Hepatocellular carcinoma — see pathology', 'Obesity', 'Leg cramps', 'Fever, unspecified']))}
+          <div class="ehr-box"><h4>Allergies (1)</h4>${list(['Penicillins — rash (childhood). Status: <b>unverified</b>.'])}
+            <h4>Today's plan (copied from progress note 07:40)</h4>${para('Graft improving. Continue current doses. Discharge home 10/02.')}</div>
+          ${box('Care Team', list(['Attending: R. Okafor, MD', 'Resident: YOU', 'Nephrology: M. Brandt, MD', 'ID: S. Kim, MD', 'Transplant pharmacy: L. Nguyen, PharmD', 'Primary RN: P. Shah']))}
+        </div>
+        ${box('Vitals — today', VITALS + EWS() + WEIGHT())}
+        ${box('Labs — most recent', para(sim.labs ? 'Resulted 13:02. See Results.' : 'AM labs 09/29: specimen clotted. Redrawn 10:40. <b>Pending.</b>'))}`;
+    },
+
+    notes: notesView,
+
+    results() {
+      const dates = ['09/24', '09/25', '09/26', '09/27', '09/28', '09/29'];
+      const rows = LABS.map(([name, range, past, now], i) =>
+        `<tr><td>${name}</td>${past.map((v) => `<td>${v}</td>`).join('')}${sim.labs ? `<td>${now}</td>` : i === 0 ? '<td rowspan="99" class="wf-pending">Clotted 06:10<br>Redrawn 10:40<br><b>PENDING</b></td>' : ''}<td>${range}</td></tr>`
+      ).join('');
+      return `
+        ${box('Results — chemistry, hematology, drug levels', `<table><tr><th>Component</th>${dates.map((d) => `<th>${d}</th>`).join('')}<th>Ref range</th></tr>${rows}</table>${para(`* Resulted 09/28 23:41.${sim.labs ? ' 09/29: redrawn 10:40, resulted 13:02.' : ''}`)}`)}
+        ${box('Pathology (1)', expander('path', '09/27 — Explant pathology — FINAL', para('Cirrhotic liver. Treated hepatocellular carcinoma, 2.1 cm, segment 8, fully necrotic. <b>A second, previously unknown HCC, 1.4 cm, segment 6</b>, margins negative. Discussed with patient: not documented. Family: not informed.'), 'pathology'))}
+        ${box('Microbiology', table(['Collected', 'Test', 'Status'], [['09/29 11:05', 'Blood culture x2', 'In process'], ['—', 'Donor cultures', 'Not available in MedChart (see Transplant Module)']]))}`;
+    },
+
+    mar() {
+      if (sim.side === 'nurse') {
+        const cell = (m) => {
+          const state = sim.chart.mar[m.id];
+          if (state === 'given') return '<span class="mar-given">Given ✓</span>';
+          if (state === 'held') return '<span class="mar-held">Held</span>';
+          if (sim.open[`fail:${m.id}`]) return `<span class="mar-fail">Barcode not recognized.</span> <button class="ehr-btn sm" data-act="sim-mar" data-med="${m.id}" data-op="give">Override</button>`;
+          return `<button class="ehr-btn sm" data-act="sim-mar" data-med="${m.id}" data-op="scan">Scan</button> <button class="ehr-btn sm" data-act="sim-mar" data-med="${m.id}" data-op="hold">Hold</button>`;
+        };
+        const due = DUE.map((m) => `<tr><td>${m.clue ? expander(`due:${m.id}`, m.text, para('Diet order: <b>renal, low potassium</b> (09/28). Also active: <b>potassium replacement protocol</b>, 20 mEq if K &lt; 4.0.'), m.clue) : m.text}</td><td>${m.due}</td><td>${cell(m)}</td></tr>`).join('');
+        const later = MEDS.filter((m) => !DUE.some((d) => d.id === m.id)).map((m) => `<tr><td>${m.text}</td><td>${m.due}</td><td>${m.last}</td></tr>`).join('');
+        return box('MAR — due 12:45 to 13:05 — scan each medication to document', `<table><tr><th>Medication</th><th>Due</th><th>Action</th></tr>${due}</table>`) +
+          box('Scheduled later / PRN', `<table><tr><th>Medication</th><th>Next due</th><th>Last given</th></tr>${later}</table>`) +
+          box('Tacrolimus', para('tacrolimus 5 mg PO due 21:00. <b>No new order</b> since this morning\'s handoff ("surgery might change the tacrolimus").'));
+      }
+      const rows = MEDS.map((m) => {
+        const key = `med:${m.id}`;
+        const open = sim.open[key];
+        return `<tr class="wf-row ${open ? 'open' : ''}" data-act="sim-open" data-key="${key}" data-clues="${m.clue || ''}"><td>${open ? '▾' : '▸'} ${m.text}</td><td>${m.last}</td><td>${m.due}</td></tr>` +
+          (open ? `<tr class="wf-detail"><td colspan="3">${m.detail || para('No additional order details.')}</td></tr>` : '');
+      }).join('');
+      return box('Active medication orders (22) — click an order for details', `<table><tr><th>Medication</th><th>Last given</th><th>Next due</th></tr>${rows}</table>`) + VIEW.orders();
+    },
+
+    orders() {
+      return `<div class="ehr-cols">
+        ${box('Diet', list(['Renal, low potassium (2 g/day) — since 09/28 (nephrology)']))}
+        ${box('Nursing', list(['Vital signs q4h', 'Telemetry — not ordered', 'Protective isolation', 'Strict I&O', 'Fall precautions']))}
+        ${box('Other', list(['Expected discharge: 10/02 — home', 'Consult: nephrology — following', 'Consult: PT/OT — seen 09/28', 'ECG 09/29 06:12 — completed, unsigned', 'Labs 09/29 — redraw pending']))}
+      </div>` + (sim.side === 'nurse' ? box('Potassium orders (3 active)', list(['potassium gluconate (1,200 mg potassium) PO daily', 'potassium chloride replacement protocol: 20 mEq PO if K &lt; 4.0', 'Diet: renal, low potassium']) + expander('kconf', 'Why are there three?', para('The supplement came from the imported home list, the protocol from the admission order set, and the diet from nephrology. Nothing reconciled them.'), 'potassium')) : '');
+    },
+
+    medrec() {
+      const march = ['apixaban 5 mg BID', 'metoprolol 25 mg BID', 'furosemide 40 mg daily', 'spironolactone 50 mg daily', 'potassium gluconate 1,200 mg daily ("for leg cramps")', 'insulin glargine 30 units nightly', 'sertraline 50 mg daily'];
+      return box('Admission medication reconciliation — imported list', para('<b>Source: outpatient clinic list, March 2026</b> (auto-imported 09/23). Status: reconciled by pharmacy technician.') + list(march)) +
+        box('Other sources (2) — pharmacist flag', expander('ml', '⚠ Pharmacist: three home medication lists conflict', `
+          <div class="ehr-cols">
+            ${box('Pharmacy fill history, September 2026', list(['apixaban 5 mg BID', 'metoprolol 25 mg BID', 'furosemide 40 mg daily', 'insulin glargine 18 units nightly', 'sertraline 100 mg daily']))}
+            ${box("Daughter's handwritten list (scanned, Media)", list(['blood thinner twice a day', 'water pill', 'insulin 18 at night', 'sertraline 100', '"potassium pills — STOPPED in May"', '"spironolactone stopped by kidney doctor"']))}
+            ${box('Imported March list', list(march))}
+          </div>${para('The EHR imported the oldest list. The potassium supplement and the old doses came from it.')}`, 'medlists'));
+    },
+
+    imaging() {
+      return box('Imaging (3)', [
+        expander('img:cxr', '09/29 07:10 — XR chest portable — FINAL — Impression: Right basilar opacity, atelectasis vs early consolidation. Small bilateral effusions.', para('Lines: right PICC tip at the cavoatrial junction.')),
+        expander('img:us', '09/28 16:40 — US Doppler liver transplant — FINAL — Impression: Transplanted liver with patent hepatic vasculature.', `<div class="wf-p">${US_BODY}</div>`, 'us_body'),
+        expander('img:us0', '09/24 08:15 — US Doppler liver transplant — FINAL — Impression: Normal post-transplant Doppler.', para('Hepatic artery PSV 92 cm/s, RI 0.68.')),
+      ].join(''));
+    },
+
+    media() {
+      const fax = sim.faxIn
+        ? [expander('media:fax', `${SIM.clockAt(SIM.FAX_AT)} today — Fax: St. Mary's Medical Center — 84 pages — scanned image — <b>Unsigned</b>`, () => faxPage(sim.fax))]
+        : [];
+      return box(`Media (${8 + fax.length})`, [
+        ...fax,
+        expander('media:ecg', '09/29 06:12 — ECG 12-lead — <b>Awaiting physician review</b>', ECG, 'ecg'),
+        expander('media:fill', '09/23 — Pharmacy fill history, September 2026 (Valley Pharmacy, faxed)', list(['apixaban 5 mg BID', 'metoprolol 25 mg BID', 'furosemide 40 mg daily', 'insulin glargine 18 units nightly', 'sertraline 100 mg daily', 'No potassium filled since May']), 'medlists'),
+        expander('media:list', "09/23 — Home medication list, handwritten by daughter (scan)", para('"Dad\'s pills: blood thinner twice a day, water pill, insulin 18 at night, sertraline 100. Potassium pills — STOPPED in May."'), 'medlists'),
+        ...['09/23 — Consent: liver transplant', '09/23 — Consent: blood products', '09/23 — Insurance card (front/back)', '09/23 — Photo ID', '09/22 — Referral letter'].map((t, i) => expander(`media:x${i}`, t, para('Scanned document. 1 page.'))),
+      ].join(''));
+    },
+
+    transplant() {
+      if (sim.tx === 0) {
+        return box('Transplant Module', para('<b>TransChart 3.2</b> is a separate application. Donor, organ and transplant-coordinator data do not flow into MedChart.') + para('<button class="ehr-btn sm" data-act="sim-tx">Launch TransChart</button>'));
+      }
+      if (sim.tx === 1) {
+        return box('TransChart 3.2 — Sign in', para('Username: <input value="riverbend\\you" disabled> Password: <input type="password" value="password" disabled>') + para('<button class="ehr-btn sm" data-act="sim-tx">Log in</button> <span class="small">(single sign-on not supported)</span>'));
+      }
+      if (sim.side === 'nurse') return box('TransChart 3.2', para('<b>Access denied.</b> Your role (RN) does not have TransChart access. Contact the transplant coordinator.'));
+      clue('donor');
+      return box('TransChart 3.2 — Donor GLD-26-8817', table(null, [['Donor', '34 M, anoxic brain injury'], ['CMV / EBV', 'Positive / positive'], ['Organ', 'Whole liver, cold ischemia 7 h 40 min']]) +
+        para('<b>Donor bronchoalveolar lavage, collected 09/21. FINAL 09/27.</b> <b>Klebsiella pneumoniae, ESBL-producing</b>, &gt;100,000 CFU/mL.') +
+        table(['Antibiotic', 'Result'], [['Ceftriaxone', '<b>R</b>'], ['Cefepime', 'R'], ['Piperacillin-tazobactam', 'I'], ['Meropenem', 'S'], ['Ertapenem', 'S'], ['TMP-SMX', 'R']]) +
+        para('Recipient team notified: auto-fax 09/27 to the transplant office (fax number on file is out of date).'));
+    },
+
+    flow() {
+      const forms = [
+        ['vitals', 'Vital signs flowsheet', ['Temp', 'HR', 'BP', 'RR', 'SpO2', 'O2 device']],
+        ['ews', 'Early warning score calculator (re-enter vitals)', ['Temp', 'HR', 'Systolic BP', 'RR', 'SpO2', 'Level of consciousness']],
+        ['weight', 'Admission navigator: weight and I&O', ['Weight (kg)', 'Intake (mL)', 'Urine output (mL)']],
+      ];
+      return box('Vitals and early warning score — today', VITALS + EWS()) + forms.map(([id, title, fields]) => {
+        const saved = sim.chart.flow.includes(id);
+        const vals = sim.flowVals[id] || {};
+        return box(`${title}${saved ? ' — <span class="mar-given">saved ✓</span>' : ''}`, `
+          <div class="wf-flow">${fields.map((f) => `<label>${f}<input data-flow="${id}" data-field="${esc(f)}" value="${esc(vals[f] || '')}" ${saved ? 'disabled' : ''}></label>`).join('')}</div>
+          ${saved ? '' : `<p class="wf-p"><button class="ehr-btn sm" data-act="sim-flow" data-form="${id}">Save</button> All fields required.</p>`}`);
+      }).join('');
+    },
+
+    assess() {
+      return box(`Required assessments — ${sim.assessDone.size} of 9 documented this shift`, table(['Assessment', 'Status'], sim.conf.assessments.map((a) => [
+        a, sim.assessDone.has(a) ? '<span class="mar-given">Documented ✓</span>' : `<button class="ehr-btn sm" data-act="sim-assess" data-name="${esc(a)}">Document</button>`,
+      ])));
+    },
+  };
+
+  function simChart() {
+    const conf = SIM.SIDES[mySimSide()];
+    const shadow = S.you.role === mySimSide() ? '' : `<span class="ehr-shadow">You are shadowing the ${mySimSide()} team.</span> `;
+    return `
+      <div class="ehr wf">
+        <div class="ehr-task">
+          <div>${shadow}${conf.task}</div>
+          <div class="wf-clocks"><span class="wf-clock">🕐 <b data-simclock></b></span><span class="ehr-task-timer" data-timer></span></div>
+        </div>
+        <div class="wf-grid">
+          <div class="ehr-window">
+            <div class="ehr-titlebar">MedChart Enterprise 9.4.1 — RIVERBEND UNIVERSITY HOSPITAL — PRD — [${mySimSide() === 'nurse' ? 'Nursing Workspace' : 'Chart Review'}]</div>
+            <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Help</span></div>
+            <div class="ehr-banner">
+              <b>WHITFIELD, JAMES</b> | 61 y.o. M | DOB 03/11/1965 | MRN 007731905 | 6 West bed 14 | POD 6 s/p deceased-donor liver transplant |
+              Attending: Okafor, R MD | Code: FULL | Isolation: PROTECTIVE | Allergies/Intolerances: 1 active (see Allergy activity) |
+              Expected discharge: 10/02 | Readmit risk: 31% | In Basket: 63 unread
+            </div>
+            <div class="ehr-tabs" id="sim-tabs">${conf.tabs.map(([id, label]) => `<button data-act="sim-tab" data-tab="${id}">${label}</button>`).join('')}</div>
+            <div class="ehr-scroll" id="sim-body"></div>
+            <div class="ehr-status">Ready | 211 notes | results pending | 22 active med orders | User: YOU | <span data-simclock></span> | CAPS</div>
+            <div id="sim-alert" class="ehr-alert"></div>
+            <div id="sim-down" class="wf-down"></div>
           </div>
-          <div class="after-grid">${panels}${extra}</div>
-          <div id="ehr-alert" class="ehr-alert"></div>
+          <aside class="wf-side" id="sim-side"></aside>
         </div>
       </div>`;
   }
 
-  // ---------- money and outcomes ----------
+  // ---------- clock-driven markers: discussion sub-steps and the current pitch ----------
 
-  function dealTerms(decision) {
-    const pkg = PACKAGES[decision.pkg];
-    const mods = MODS.filter((m) => decision.mods.includes(m.id));
-    const sum = (field) => mods.reduce((total, m) => total + (m[field] || 0), 0);
-    const hospital = (pkg.cost + sum('cost')) * (1 - sum('discount'));
-    const phased = mods.some((m) => m.phased);
-    const yearOne = phased ? hospital / 3 : hospital;
-    return { pkg, mods, hospital, phased, yearOne, months: pkg.months + sum('months'), over: yearOne > BUDGET + 1e-9 };
+  const SUBSTEPS = [[0, 'Clinical pitch', 3], [180, 'Reactions', 5], [480, 'Priorities', 2]];
+  const substepsHtml = () => `<ol class="substeps" data-substeps>${SUBSTEPS.map(([from, label, min]) => `<li data-from="${from}">${label} · ${min} min</li>`).join('')}</ol>`;
+  function substepTick() {
+    const list = document.querySelector('[data-substeps]');
+    if (!list) return;
+    const e = stepElapsed();
+    const items = [...list.children];
+    const current = items.filter((li) => Number(li.dataset.from) <= e).pop();
+    items.forEach((li) => (li === current ? li.setAttribute('aria-current', 'step') : li.removeAttribute('aria-current')));
   }
 
-  const pkgTitle = (id) => (id === 'keep' ? PACKAGES.keep.name : `PACKAGE ${PACKAGES[id].letter} · ${PACKAGES[id].name}`);
-  const byRank = () => [...PROBLEMS].sort((a, b) => S.problems[a.id].rank - S.problems[b.id].rank);
-  const inTier = (tier) => byRank().filter((p) => S.problems[p.id].tier === tier.k);
-
-  function scorecard(pkgId) {
-    const fixes = new Set(PACKAGES[pkgId].fixes);
-    return TIERS.map((tier) => {
-      const list = inTier(tier);
-      const fixed = list.filter((p) => fixes.has(p.id)).length;
-      return `
-        <div class="score-tier ${tier.k}">
-          <div class="score-head"><span>${tier.label}</span><b>${fixed} of ${list.length} fixed</b></div>
-          ${list.map((p) => `<span class="pchip ${fixes.has(p.id) ? 'ok' : 'no'}">${fixes.has(p.id) ? '✓' : '✗'} ${esc(p.label)}</span>`).join('')}
-        </div>`;
-    }).join('');
+  // Five 1-minute pitches, then the lightning questions.
+  function pitchTick() {
+    if (S.step !== 'p4_pitch') return;
+    const slot = Math.floor(stepElapsed() / 60);
+    const letter = PACKAGE_ORDER[slot] || null;
+    document.querySelectorAll('[data-pkg-card]').forEach((card) => {
+      const on = card.dataset.pkgCard === letter;
+      card.classList.toggle('current', on);
+      if (on) card.setAttribute('aria-current', 'true');
+      else card.removeAttribute('aria-current');
+    });
+    const now = document.querySelector('[data-pitchnow]');
+    if (now) now.textContent = letter ? `${letter}. ${PACKAGES[letter].name}` : 'Lightning questions';
   }
 
-  function dealBox(decision) {
-    if (decision.pkg === 'keep') return '<div class="deal"><div><small>COST</small><b>$0</b></div><div><small>TIMELINE</small><b>—</b></div></div>';
-    const d = dealTerms(decision);
-    return `
-      <div class="deal">
-        <div><small>COST TO PENN GENERAL</small><b>${money(d.hospital)}</b></div>
-        <div class="${d.over ? 'over' : 'under'}"><small>YEAR ONE vs ${money(BUDGET)} BUDGET</small><b>${money(d.yearOne)}</b></div>
-        <div><small>TIME TO GO-LIVE</small><b>${d.months} months</b></div>
-      </div>`;
+  // ---------- Phase 2: the quiz ----------
+
+  function quizNow() {
+    const e = stepElapsed();
+    const idx = Math.max(0, Math.min(QUIZ.length - 1, Math.floor(e / QUIZ_SECONDS)));
+    const inQ = e - idx * QUIZ_SECONDS;
+    return { idx, q: QUIZ[idx], reveal: inQ >= QUIZ_ANSWER_SECONDS, left: Math.max(0, Math.ceil(QUIZ_ANSWER_SECONDS - inQ)) };
   }
 
-  function roleOutcome(role, decision) {
-    const d = dealTerms(decision);
-    const lines = d.mods.filter((m) => m.role === role).map((m) => m.effect);
-    if (role === 'cfo' && decision.pkg !== 'keep') {
-      lines.unshift(
-        d.over
-          ? `Year-one cost of ${money(d.yearOne)} blew through the ${money(BUDGET)} capital budget. The MRI replacement was deferred.`
-          : `Year-one cost of ${money(d.yearOne)} fit inside the ${money(BUDGET)} capital budget.`
-      );
+  let quizKey = null;
+  function quizTick() {
+    if (!S || S.step !== 'p2_quiz') return;
+    const now = quizNow();
+    const key = `${now.idx}:${now.reveal}`;
+    if (key !== quizKey) {
+      quizKey = key;
+      const el = document.querySelector('[data-dyn="quiz"]');
+      if (el) DYN.quiz(el);
     }
-    const changed = d.mods.map((m) => ((d.pkg.outcomeWith || {})[m.id] || {})[role]).find(Boolean);
+    document.querySelectorAll('[data-qleft]').forEach((el) => { el.textContent = now.reveal ? '' : `${now.left}s`; });
+  }
+
+  function quizCounts(q, side) {
+    const counts = S.quiz[q.id];
+    if (!side) return q.options.map((_, i) => counts.physician[i] + counts.nurse[i]);
+    return counts[side];
+  }
+
+  function answerBars(q, counts, highlight) {
+    const total = counts.reduce((a, b) => a + b, 0);
+    return `<div class="qbars">${q.options.map((o, i) => `
+      <div class="qbar ${highlight && q.correct === i ? 'right' : ''}">
+        <span>${esc(o)}</span><span class="qbar-track"><span style="width:${pct(counts[i], total)}%"></span></span><b>${counts[i]}</b>
+      </div>`).join('')}</div>`;
+  }
+
+  // ---------- Phase 5: choosing a package or a pair ----------
+
+  function choiceSummary(key) {
+    if (!key) return '<span class="muted">Pick one or two packages.</span>';
+    const cost = C.choiceCost(key);
+    const fixes = C.choiceFixes(key);
+    const over = cost > BUDGET ? ` — over budget: needs ${money(cost - BUDGET)} more or a phased contract` : '';
+    return `<b>${esc(choiceTitle(key))}</b> · <span class="${over ? 'red' : 'ok'}">${money(cost)}${over}</span> · fixes ${fixes.length}: ${fixes.join(', ')}`;
+  }
+
+  function picker(slot, current) {
+    const letters = C.choiceLetters(current);
     return `
-      <div class="outcard">
-        <div class="outcard-head">${ROLES[role].icon} ${ROLES[role].name}</div>
-        <p>${esc(changed || d.pkg.outcome[role])}</p>
-        ${lines.map((l) => `<p class="outcard-plus">＋ ${esc(l)}</p>`).join('')}
+      <div class="picker">
+        <div class="picker-btns">${PACKAGE_ORDER.map((l) => `
+          <button class="pkbtn pk-${l} ${letters.includes(l) ? 'on' : ''}" data-act="pick" data-slot="${slot}" data-pkg="${l}">
+            <span class="pkl">${l}</span><span>${PACKAGES[l].icon} ${esc(PACKAGES[l].name)}<small>${money(PACKAGES[l].cost)}</small></span>
+          </button>`).join('')}</div>
+        <div class="picker-sum">${choiceSummary(current)}</div>
       </div>`;
   }
 
-  // ---------- shared fragments ----------
-
-  function roleCard(key) {
-    const r = ROLES[key];
+  function packageCard(l, opts) {
+    const pkg = PACKAGES[l];
+    const top = new Set(S.problems.top5);
+    const catchText = S.catchText[l];
+    const showCatch = !!catchText && (opts.catches || S.catches.includes(l));
     return `
-      <div class="rolecard">
-        <div class="rolecard-head"><span class="rolecard-icon">${r.icon}</span> ${r.name}</div>
-        <div class="eyebrow">YOUR PRIORITY</div>
-        <p class="rolecard-priority">${esc(r.priority)}</p>
-        ${r.detail ? `<p>${esc(r.detail)}</p>` : ''}
-        <p><b class="want">You want:</b> ${esc(r.want)}</p>
-        <p><b class="fear">You fear:</b> ${esc(r.fear)}</p>
+      <div class="pkcard pk-${l}" data-pkg-card="${l}">
+        <div class="pkcard-head"><span class="pkl">${l}</span><span>${pkg.icon} ${esc(pkg.name)}</span><b>${money(pkg.cost)}</b></div>
+        <p class="small muted">${esc(pkg.tech)}</p>
+        <p>${esc(pkg.pitch)}</p>
+        <div class="covers">${pkg.fixes.map((id) => `<span class="pchip ${top.has(id) ? 'ok' : ''}" title="${esc(PROBLEM[id].label)}">${id} · ${esc(PROBLEM[id].label)}</span>`).join('')}</div>
+        <p class="small">${pkg.fixes.filter((id) => top.has(id)).length} of the hospital's top five</p>
+        ${showCatch ? `<div class="catch ${S.catches.includes(l) ? 'revealed' : ''}"><b>${S.catches.includes(l) ? 'CATCH (revealed)' : '🔒 CATCH: reveal only when asked'}</b> ${esc(catchText)}</div>` : ''}
+        ${(opts.host || opts.catches) && !S.catches.includes(l) && S.step !== 'p1_sim' ? `<button class="btn small" data-act="catch" data-pkg="${l}">Reveal catch</button>` : ''}
       </div>`;
   }
 
-  function roleBrief(key) {
-    const r = ROLES[key];
+  const topFiveList = () => `<ol class="topfive">${S.problems.top5.map((id) => `<li><b>${id} · ${esc(PROBLEM[id].label)}</b><small>${esc(PROBLEM[id].desc)}</small></li>`).join('')}</ol>`;
+
+  // ---------- Phase 6: the replay ----------
+
+  function finalChoice() {
+    return S.decision && S.decision.final;
+  }
+
+  function replayHtml(big) {
+    const key = finalChoice();
+    const letters = C.choiceLetters(key);
+    const moments = letters.map((l) => `<div class="moment pk-${l}"><span class="pkl">${l}</span><div><b>${esc(PACKAGES[l].name)}</b><p>${esc(PACKAGES[l].replay)}</p></div></div>`).join('');
+    const mine = !S.isHost && mySimSide() && S.you.sim ? myCalls() : '';
     return `
-      <div class="private">
-        <div class="private-head">🔒 ${r.short.toUpperCase()} BRIEFING</div>
-        <p>${r.brief.general}</p>
-        ${PACKAGE_ORDER.map((id) => `<p class="brief-line"><span class="pkg-letter p${id}">${PACKAGES[id].letter}</span><span>${r.brief[id]}</span></p>`).join('')}
-        <p class="muted small">Only your role team sees this. Share it, or don't.</p>
+      <div class="replay ${big ? 'big' : ''}">
+        <div class="eyebrow">BED 14 · SEPTEMBER 29 · REPLAYED ON ${key ? esc(choiceShort(key)) : 'THE OLD SYSTEM'}</div>
+        ${key ? moments : '<p class="lead">No package was chosen. The afternoon replays exactly as before.</p>'}
+        ${key ? `<div class="happy"><div class="eyebrow">THE HAPPY ENDING</div><ul class="checks">${HAPPY_ENDING.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : ''}
+        ${mine}
       </div>`;
   }
 
-  const missedBanner = (side) => `
-    <div class="missed">
-      <div class="eyebrow dark">${side === 'physician' ? 'IN THE PHYSICIAN SIMULATION' : 'IN THE NURSE SIMULATION'}</div>
-      <div class="missed-row">${SIM[side].missed}</div>
-      <div class="small">Advisory #${critNumber(side)} of ${ALERTS[side].length}. It looked exactly like "${SIM[side].lookalike}."</div>
-    </div>`;
+  // The player's own calls in the crash, against what happened in the replay.
+  function myCalls() {
+    const conf = SIM.SIDES[mySimSide()];
+    const made = S.you.sim.chart.decisions || {};
+    const rows = conf.decisions.filter((d) => !d.text).map((d) => {
+      const v = made[d.id];
+      const label = (id) => (d.options.find(([o]) => o === id) || [, id])[1];
+      const shown = d.multi ? (v || []).map(label).join(', ') : v ? label(v) : '';
+      const ok = d.multi ? v && d.best.every((b) => v.includes(b)) : v && d.best.includes(v);
+      return `<tr><td>${esc(d.q)}</td><td>${shown ? esc(shown) : '<span class="muted">not recorded</span>'}</td><td>${v ? (ok ? '✓' : '✗') : ''}</td></tr>`;
+    }).join('');
+    return `<details class="recall"><summary>Your ${mySimSide()} team's calls during the crash</summary><table class="calls">${rows}</table></details>`;
+  }
 
-  const displayName = () => (S.you.role === 'physician' ? `Dr. ${S.you.name}` : S.you.name);
-  const mySide = () => ROLES[S.you.role].side;
-  const stepList = (items) => `<ol class="steps">${items.map((i) => `<li>${i}</li>`).join('')}</ol>`;
+  // ---------- the facilitator dashboard ----------
+
+  function dashboardHtml() {
+    const progress = ROLE_ORDER.map((r) => `<tr><td>${ROLES[r].icon} ${esc(ROLES[r].short)}</td><td>${S.roleCounts[r]}</td></tr>`).join('');
+    const sim = ['physician', 'nurse'].map((t) => {
+      const x = S.sim[t];
+      const found = Object.values(x.clues).reduce((a, b) => a + b, 0);
+      return `<tr><td>${t === 'physician' ? '🧑‍⚕️ Physician side' : '👩‍⚕️ Nurse side'}</td><td>${x.players} charting</td><td>${x.handled} alerts cleared (${x.overridden} by override)</td><td>${found} clue openings</td></tr>`;
+    }).join('');
+    const key = QUIZ.map((q) => `<tr><td>${esc(q.q)}</td><td>${esc(q.answer)}</td><td>${q.problems.join(', ')}</td></tr>`).join('');
+    const calls = ['physician', 'nurse'].map((t) => `<h3>${t === 'physician' ? 'Physician' : 'Nurse'} decisions</h3><ul>${SIM.SIDES[t].decisions.filter((d) => d.best).map((d) => `<li>${esc(d.q)}: <b>${d.best.map((b) => esc((d.options.find(([o]) => o === b) || [, b])[1])).join(' or ')}</b></li>`).join('')}</ul>`).join('');
+    const clues = SIM.CLUES.map((c) => `<li>${esc(c.label)} — <i>${esc(c.where)}</i></li>`).join('');
+    return `
+      <div class="dashboard">
+        <h2>📋 Facilitator dashboard</h2>
+        <h3>Team progress</h3>
+        <table class="combos"><tr><th>Role</th><th>Players</th></tr>${progress}</table>
+        <table class="combos"><tr><th>Simulation</th><th>Charting</th><th>Alerts</th><th>Clues</th></tr>${sim}</table>
+        <p>Quiz answers: ${S.counts.quiz} · rankings: ${S.counts.rank} · stars: ${S.counts.stars} · choices: ${S.counts.picks} · votes: ${S.counts.votes}</p>
+        <h3>Answer key</h3>
+        <table class="combos"><tr><th>Quiz question</th><th>Answer</th><th>Problems</th></tr>${key}</table>
+        ${calls}
+        <h3>Where the clues are</h3><ul>${clues}</ul>
+        <h3>Phase briefs (01–06)</h3>
+        ${briefs.phases.map((m) => `<div class="brief">${md(m)}</div>`).join('') || '<p class="muted">Loading…</p>'}
+        <h3>Stakeholder briefs (07–15)</h3>
+        ${ROLE_ORDER.map((r) => (briefs.briefs[r] ? `<div class="brief">${md(briefs.briefs[r])}</div>` : '')).join('')}
+      </div>`;
+  }
+
+  function openModal(html) {
+    document.querySelector('.modal')?.remove();
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.dataset.act = 'closemodal';
+    modal.innerHTML = `<div class="modal-box wide">${html}<button class="btn" data-act="closemodal">Close</button></div>`;
+    document.body.appendChild(modal);
+  }
 
   // ---------- step screens ----------
 
   function stage() {
     const host = S.isHost;
-    const me = host ? null : ROLES[S.you.role];
+    const role = host ? null : S.you.role;
     switch (S.step) {
       case 'lobby':
         if (host) {
@@ -758,11 +1148,10 @@
         return `
           <div class="center narrow">
             <h1>Welcome, ${esc(displayName())}</h1>
-            <div class="eyebrow">ROLE: ${me.name}</div>
-            ${roleCard(S.you.role)}
-            <p>Read your role card carefully.</p>
-            <p class="muted">Don't worry about memorizing anything.</p>
-            <p class="waiting">Waiting for the hospital CEO to begin<span class="dots"></span></p>
+            <div class="eyebrow">${ROLES[role].icon} ${ROLES[role].name} · GROUP ${myGroup()}: ${esc(GROUPS[myGroup()].name.toUpperCase())}</div>
+            <p class="muted">Read your brief. Its private information is yours alone, and it is meant to drive the debate.</p>
+            ${briefHtml(role)}
+            <p class="waiting">Waiting for the facilitator to begin<span class="dots"></span></p>
             <button class="btn ghost" data-act="rerole">Change role</button>
           </div>`;
 
@@ -771,348 +1160,216 @@
           return `
             <div class="center narrow reveal">
               <h1 class="huge">BEFORE YOU FIX IT, USE IT.</h1>
-              <p class="lead">You have 2½ minutes inside Penn General's EHR.</p>
+              <p class="lead">Four minutes inside Riverbend's EHR. Both teams open James Whitfield, bed 14, at 12:45 on September 29.</p>
               <div class="twocol">
-                <div class="taskcard"><div class="eyebrow">🧑‍⚕️ PHYSICIANS</div><p>${SIM.physician.brief}</p><p class="muted small">Shadowing: CFOs and IT Leads</p></div>
-                <div class="taskcard"><div class="eyebrow">👩‍⚕️ NURSES</div><p>${SIM.nurse.brief}</p><p class="muted small">Shadowing: Patient Advocates and Safety Officers</p></div>
+                <div class="taskcard"><div class="eyebrow">🧑‍⚕️ PHYSICIAN TEAM</div><p>Find out why he is getting worse. Six decisions.</p><p class="muted small">Shadowing: executives, finance, IT</p></div>
+                <div class="taskcard"><div class="eyebrow">👩‍⚕️ NURSE TEAM</div><p>Four patients, insulin due, a daughter on the phone. Five decisions.</p><p class="muted small">Shadowing: clinical leaders, compliance, advocates</p></div>
               </div>
+              <p class="muted">Separate rooms. They cannot hear each other. The crash is the point. Vendors prepare their pitch.</p>
+            </div>`;
+        }
+        if (!mySimSide()) return `<div class="center narrow"><h1>You are the vendor.</h1><p class="lead">While the clinicians work bed 14, prepare your pitch. The hospital will call you in.</p>${briefHtml(role)}</div>`;
+        return `
+          <div class="center narrow">
+            ${S.you.role === mySimSide()
+              ? briefHtml(role)
+              : `<div class="taskcard"><div class="eyebrow">YOU ARE SHADOWING THE ${mySimSide().toUpperCase()} TEAM</div><p class="lead">For four minutes you see exactly the chart, alerts and pages the ${mySimSide()} team sees. Log what gets in their way.</p><p>Patient: James Whitfield, 61, bed 14, day 6 after a liver transplant. It is 12:45 on September 29.</p></div>${briefHtml(role)}`}
+          </div>`;
+
+      case 'p1_sim':
+        if (!host && mySimSide()) return simChart();
+        return `
+          <div class="center narrow">
+            <div class="eyebrow">BED 14 · JAMES WHITFIELD, 61 · DAY 6 AFTER LIVER TRANSPLANT</div>
+            <p class="wf-hostclock">Ward clock <b data-simclock></b></p>
+            <div class="bigtimer" data-timer="big"></div>
+            <h1>${host ? 'The clinicians are charting.' : 'The clinicians are in bed 14.'}</h1>
+            <p class="lead">${host ? 'Alerts speed up. At 13:02 the labs fire. At 13:03 the EHR goes down.' : 'Use the time to plan your pitch.'}</p>
+            <div data-dyn="simhost"></div>
+            ${host ? '' : `<div class="pkcards">${PACKAGE_ORDER.map((l) => packageCard(l, { catches: true })).join('')}</div>`}
+          </div>`;
+
+      case 'p2_quiz':
+        return `
+          <div class="center narrow">
+            <h1>Did you spot it?</h1>
+            <div data-dyn="quiz"></div>
+          </div>`;
+
+      case 'p2_rank':
+        if (!host && ['physician', 'nurse'].includes(role)) {
+          return `
+            <div class="center narrow">
+              <h1>Your team's top five</h1>
+              <p class="lead">Tap the five EHR problems that hurt bed 14 most, in order. Your team's list merges with the other team's.</p>
+              <div class="bigtimer side" data-timer></div>
+              <div data-dyn="rank"></div>
             </div>`;
         }
         return `
-          <div class="center narrow reveal">
-            <h1 class="huge">BEFORE YOU FIX IT, USE IT.</h1>
-            <p class="lead">${S.you.role === mySide() ? `You are about to work a shift as a ${mySide()}.` : `You are about to shadow a ${mySide()} and see exactly what they see.`}</p>
-            <div class="taskcard"><div class="eyebrow">YOUR TASK</div><p class="lead">${SIM[mySide()].brief}</p></div>
-            <p class="muted">You have 2½ minutes. Notice everything that gets in your way.</p>
+          <div class="center wide">
+            <h1>The physician and nurse teams rank their top five</h1>
+            <div class="bigtimer side" data-timer></div>
+            <div data-dyn="teamtops"></div>
           </div>`;
 
-      case 'p1_ehr':
-        if (!host) return ehrChart(mySide());
-        return `
-          <div class="center narrow">
-            <div class="eyebrow">PATIENT: MARIA RODRIGUEZ, 67</div>
-            <div class="bigtimer" data-timer="big"></div>
-            <h1>The hospital is charting.</h1>
-            <p class="lead">Notice everything that gets in your way.</p>
-            <div data-dyn="ehrhost"></div>
-          </div>`;
-
-      case 'p1_log':
-        // The projector shows both simulations side by side with the hospital's live problem log.
+      case 'p3_discuss':
         if (host) {
           return `
             <div class="center wide">
-              <div class="timeline"><h1 class="huge">TIME.</h1><div class="bigtimer" data-timer="big"></div></div>
+              <h1>Stakeholder discussion</h1>
+              ${substepsHtml()}<p class="muted">Chaired by the CEO.</p>
               <div class="split">
+                <div><div class="eyebrow">HOSPITAL PROBLEM LIST (MERGED) — CLICK TO MOVE IN OR OUT OF THE TOP FIVE</div><div data-dyn="merged"></div></div>
                 <div>
-                  ${missedBanner('physician')}${missedBanner('nurse')}
-                  <div data-dyn="ehrstats"></div>
-                  <p class="lead">That was <b class="accent">alert fatigue</b>: when alerts are frequent and low-value, people start ignoring all of them, including the one that matters.</p>
-                </div>
-                <div>
-                  <h2>What else went wrong? Log everything you ran into.</h2>
-                  <div data-dyn="count:reports"></div>
-                  <div class="compactbars" data-dyn="reportbars"></div>
+                  <div class="eyebrow">AGREED TOP FIVE</div><div data-dyn="top5"></div>
+                  <div class="taskcard"><div class="eyebrow">PROMPTS</div><ul>
+                    <li>Was this a people failure or a system failure?</li>
+                    <li>Which problem, if fixed, would have caught the tacrolimus level first?</li>
+                    <li>What does each group lose if nothing changes?</li></ul></div>
                 </div>
               </div>
             </div>`;
         }
+        if (myGroup() === 5) return `<div class="center narrow"><h1>Wait outside.</h1><p class="lead">The hospital is deciding which five problems to put to you. The CEO will call you in.</p>${briefHtml(role)}</div>`;
         return `
-          <div class="center narrow">
-            <h1 class="huge">TIME.</h1>
-            ${missedBanner(mySide())}
-            <div data-dyn="ehrstats"></div>
-            <p class="lead">You just experienced <b class="accent">alert fatigue</b>: when alerts are frequent and low-value, people start ignoring all of them, including the one that matters.</p>
-            <h2>What else went wrong?</h2>
-            <p class="muted">Tick every problem you ran into. Work alone for now.</p>
-            <div data-dyn="report"></div>
-            <label class="field">Anything not on the list?
-              <input data-other maxlength="200" value="${esc(S.you.report.other)}" placeholder="Optional">
-            </label>
+          <div class="center wide">
+            <h1>Stakeholder discussion</h1>
+            ${substepsHtml()}
+            <p class="muted">${role === 'clinical' ? 'You open: present the merged problem list and the near miss in 3 minutes.' : role === 'exec' ? 'You chair. Decide: people failure or system failure? Then call in the vendor.' : 'Respond from your own brief. Use your private information.'}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div class="split">
+              <div><div class="eyebrow">STAR THE FIVE THAT MATTER MOST TO YOU</div><div data-dyn="stars"></div></div>
+              <div><div class="eyebrow">AGREED TOP FIVE SO FAR</div><div data-dyn="top5"></div>${myBriefs(true)}</div>
+            </div>
           </div>`;
 
-      case 'p2_intra':
-        if (host) {
-          return `
-            <div class="center narrow">
-              <div class="bigtimer" data-timer="big"></div>
-              <h1>Sit with your role team.</h1>
-              ${stepList([
-                'Compare what each of you noticed.',
-                `On your own device, star the <b>${TOP_PICKS} problems</b> that matter most to your department.`,
-                'Your representative will speak for the team in the next step.',
-              ])}
-              <div data-dyn="count:top"></div>
-              <div data-dyn="reps"></div>
-            </div>`;
-        }
-        return `
-          <div class="center narrow">
-            <div class="bigtimer side" data-timer="big"></div>
-            <h1>TEAM HUDDLE: ${me.plural.toUpperCase()}</h1>
-            <p class="lead">Find the other ${me.plural.toLowerCase()}. Compare what you noticed, then star the <b>${TOP_PICKS} problems</b> that matter most to your department.</p>
-            <div data-dyn="rep"></div>
-            <div data-dyn="intra"></div>
-          </div>`;
-
-      case 'p2_hospital':
-        return `
-          <div class="center">
-            <div class="bigtimer" data-timer="big"></div>
-            <h1>One hospital. One problem list.</h1>
-            <p class="lead">Each representative shares their team's top problems. Then agree: what is critical, what is desirable, and what can wait?</p>
-            ${host ? '<p class="muted">CEO: click a problem to move it to the next column.</p>' : '<div data-dyn="rep"></div><div data-dyn="teamtop"></div>'}
-            <div data-dyn="board"></div>
-            ${host ? '<div data-dyn="others"></div>' : ''}
-          </div>`;
-
-      case 'p3_handshake':
+      case 'p4_handshake':
         return `
           <div class="center narrow reveal">
-            <h1 class="huge">🤝 CALL THE VENDOR</h1>
-            <p class="lead">Representatives: stand up, shake hands, and present Penn General's critical problems.</p>
-            <div data-dyn="critical"></div>
-            ${host ? '' : '<div data-dyn="rep"></div>'}
+            <div class="handshake">🤝</div>
+            <h1 class="huge">THE CEO CALLS IN THE VENDOR.</h1>
+            <p class="lead">${host ? 'The CEO shakes hands with the vendor and reads out the top five.' : role === 'exec' ? '<b>Your move:</b> shake hands with the vendor and read these five aloud.' : role === 'vendor' ? '<b>Your move:</b> shake hands with the CEO and listen.' : 'The CEO reads the top five to the vendor.'}</p>
+            <div data-dyn="top5"></div>
           </div>`;
 
-      case 'p3_packages':
+      case 'p4_pitch':
         return `
-          <div class="center">
-            <div class="bigtimer" data-timer="big"></div>
-            <h1>VENDOR PITCHFEST</h1>
-            <p class="lead">The vendor offers four packages. <b>None of them fixes everything.</b></p>
-            <div data-dyn="packages"></div>
-            <p class="muted">Option five: sign nothing and keep the current EHR. $0.</p>
+          <div class="center wide">
+            <h1>Pitch fest</h1>
+            <p class="muted">${host ? 'One minute per package. Then one lightning question per group. Reveal a catch only when a question reaches it.' : role === 'vendor' ? 'Pitch each package in 1 minute: technology, cost, problems fixed. Disclose a catch only when a question reaches it.' : 'One lightning question per group, at most. Green chips are in the hospital\'s top five.'}</p>
+            <p class="pitchnow">Now pitching: <b data-pitchnow></b> · 1 min per package, then lightning questions</p>
+            <div class="bigtimer side" data-timer></div>
+            ${!host && role !== 'vendor' && briefSection(role, 'Ask the vendor') ? `<details class="recall" open><summary>Questions from your brief</summary>${md(briefSection(role, 'Ask the vendor'))}</details>` : ''}
+            <div data-dyn="pkcards"></div>
+            <div data-dyn="lightning"></div>
           </div>`;
 
-      case 'p4_intra':
+      case 'p5_framing':
+        return `
+          <div class="center wide">
+            <h1>Finance framing</h1>
+            <p class="lead">${!host && role === 'finance' ? '<b>You present this</b> in 2 minutes, then chair the debate.' : 'The CFO frames the budget.'}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div class="split">
+              <div>
+                <div class="capbox"><small>APPROVED CAPITAL</small><b>${money(BUDGET)}</b><span>The cap is firm. Above it needs board approval or a phased contract.</span></div>
+                <div class="eyebrow">FINANCE'S ASKS BEFORE SUPPORTING ANY PACKAGE</div>
+                <ol>${FINANCE_ASKS.map((a) => `<li>${esc(a)}</li>`).join('')}</ol>
+              </div>
+              <div>
+                <div class="eyebrow">COMBINATIONS WITHIN BUDGET</div>
+                <table class="combos"><tr><th>Choice</th><th>Cost</th><th>Problems fixed</th><th>Count</th></tr>
+                  ${COMBOS.map((k) => `<tr><td><b>${esc(choiceShort(k))}</b></td><td>${money(C.choiceCost(k))}</td><td>${C.choiceFixes(k).join(', ')}</td><td>${C.choiceFixes(k).length}</td></tr>`).join('')}
+                </table>
+                <p class="small">C + D covers the most clinical risk but costs ${money(C.choiceCost('C+D'))}. Finance must find $3M or phase the work. No package fixes problem 13.</p>
+              </div>
+            </div>
+            <div data-dyn="vendorqa"></div>
+          </div>`;
+
+      case 'p5_intra':
+      case 'p5_inter': {
+        const inter = S.step === 'p5_inter';
         if (host) {
           return `
-            <div class="center narrow">
-              <div class="bigtimer" data-timer="big"></div>
-              <h1>Back to your role teams.</h1>
-              ${stepList([
-                'Read your <b>private briefing</b>. Every role has different information.',
-                'Decide which package your team can support, and which terms you will demand.',
-                'Cast a straw vote on your own device. You can change it later.',
-              ])}
-              <p class="lead">CFOs: you hold the financial details nobody else has.</p>
-              <div data-dyn="count:straw"></div>
+            <div class="center wide">
+              <h1>${inter ? 'All-team discussion' : 'Team discussion'}</h1>
+              <p class="muted">${inter ? 'Groups argue, trade and form coalitions. The vendor answers questions on request.' : 'Each group agrees its first and second choice.'}</p>
+              <div class="bigtimer side" data-timer></div>
+              <div data-dyn="groupboard"></div>
+              <div data-dyn="vendorqa"></div>
+              ${inter ? '<div class="taskcard"><div class="eyebrow">DEBATE PROMPTS</div><ul><li>Who is responsible when the AI is wrong?</li><li>Is it better to fix the most problems, or the problems that nearly harmed bed 14?</li><li>What is the cost of a safety miss compared with the cost of a package?</li></ul></div>' : ''}
             </div>`;
         }
+        if (!isVoter()) {
+          return `<div class="center wide"><h1>Answer their questions.</h1><p class="lead">Groups may call you over. You may offer milestone payments or a phased start if finance pushes.</p><div class="bigtimer side" data-timer></div><div data-dyn="vendorqa"></div>${inter ? '<div data-dyn="groupboard"></div>' : ''}<div data-dyn="pkcards"></div></div>`;
+        }
         return `
-          <div class="center narrow">
-            <div class="bigtimer side" data-timer="big"></div>
-            <h1>TEAM HUDDLE: ${me.plural.toUpperCase()}</h1>
-            ${roleBrief(S.you.role)}
-            <h2>Which package can your team support?</h2>
-            <p class="muted">A straw vote. Only your team sees your team's count.</p>
-            <div data-dyn="ballot:straw"></div>
-            <details class="recall"><summary>📦 The four packages</summary><div data-dyn="packages"></div></details>
+          <div class="center wide">
+            <h1>${inter ? 'All-team discussion' : 'Agree your first and second choice'}</h1>
+            <p class="muted">${inter ? 'Argue, trade, form coalitions. You can still change your choices.' : `Talk it through with your group: ${esc(GROUPS[myGroup()].name)}.`}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div class="split">
+              <div><div class="eyebrow">YOUR FIRST CHOICE</div><div data-dyn="pick:first"></div><div class="eyebrow">YOUR SECOND CHOICE</div><div data-dyn="pick:second"></div></div>
+              <div>${inter ? '<div class="eyebrow">WHERE EVERY GROUP STANDS</div><div data-dyn="groupboard"></div>' : '<div class="eyebrow">YOUR GROUP SO FAR</div><div data-dyn="myteam"></div>'}
+                <div data-dyn="vendorqa"></div>
+                <details class="recall"><summary>Your brief</summary>${myBriefs(true)}</details></div>
+            </div>
           </div>`;
-
-      case 'p4_inter':
-        return `
-          <div class="center ${host ? 'wide' : 'narrow'}">
-            <div class="bigtimer ${host ? '' : 'side'}" data-timer="big"></div>
-            <h1>HOSPITAL NEGOTIATION</h1>
-            <p class="lead">Representatives negotiate for their teams. <b>CFO and Physician representatives lead:</b> can clinical and financial priorities meet?</p>
-            <p class="muted">Ask for features to be added, delayed or traded. Finance can propose different ways to pay. Aim for one package, with terms, that the whole hospital can live with.</p>
-            ${host ? '' : '<div data-dyn="rep"></div>'}
-            <div data-dyn="strawboard"></div>
-            ${host ? '' : `
-              <h2>Your position</h2>
-              <p class="muted">Update it as the negotiation moves.</p>
-              <div data-dyn="ballot:straw"></div>
-              <details class="recall"><summary>🔒 Your private briefing</summary>${roleBrief(S.you.role)}</details>
-              <details class="recall"><summary>📦 The four packages</summary><div data-dyn="packages"></div></details>`}
-          </div>`;
+      }
 
       case 'p5_vote':
-        return `
-          <div class="center narrow">
-            <div class="bigtimer ${host ? '' : 'side'}" data-timer="big"></div>
-            <h1>FINAL VOTE</h1>
-            <p class="lead">Every stakeholder gets one vote. Results are sealed until the CEO announces the decision.</p>
-            ${host
-              ? '<div data-dyn="count:final"></div><p class="muted">The package with the most votes wins. A term is adopted if a majority of voters ask for it. Ties go to the cheaper option.</p>'
-              : '<div data-dyn="ballot:final"></div>'}
-          </div>`;
-
-      case 'p6_decision': {
-        const d = S.decision;
-        const pkg = PACKAGES[d.pkg];
-        const terms = MODS.filter((m) => d.mods.includes(m.id));
-        return `
-          <div class="center narrow reveal">
-            <div class="eyebrow">THE HOSPITAL HAS DECIDED</div>
-            <div class="winner p${d.pkg}">
-              <div class="winner-icon">${pkg.icon}</div>
-              <h1>${esc(pkgTitle(d.pkg))}</h1>
-              <p>${esc(pkg.tagline)}</p>
-            </div>
-            ${d.tie ? '<p class="muted">The vote was tied. Ties go to the cheaper option.</p>' : ''}
-            <div>
-              <div class="eyebrow">REQUESTED TERMS</div>
-              ${terms.length ? `<ul class="terms">${terms.map((m) => `<li>${esc(m.label)}</li>`).join('')}</ul>` : '<p class="muted">No terms had majority support.</p>'}
-            </div>
-            ${dealBox(d)}
-            <p class="lead">🤝 Representatives: return the decision to the vendor. ${d.pkg === 'keep' ? '' : 'CFO: sign the contract.'}</p>
-            <div data-dyn="finalboard"></div>
-          </div>`;
-      }
-
-      case 'p6_sim':
-        if (!host) return afterEhr(mySide());
-        return `
-          <div class="center narrow reveal">
-            <h1 class="huge">ONE YEAR LATER</h1>
-            <p class="lead">${S.decision.pkg === 'keep' ? 'Nothing was installed.' : `${esc(PACKAGES[S.decision.pkg].name)} is live.`} Open Maria's chart again.</p>
-            <p class="muted">Look at what is new, and what did not change.</p>
-          </div>`;
-
-      case 'p6_outcome': {
-        const d = S.decision;
-        const pkg = PACKAGES[d.pkg];
-        const roles = host ? ROLE_ORDER : [S.you.role, ...ROLE_ORDER.filter((r) => r !== S.you.role)];
-        return `
-          <div class="center reveal">
-            <div class="eyebrow">ONE YEAR LATER · ${esc(pkgTitle(d.pkg))}</div>
-            <h1 class="huge">${esc(pkg.headline)}</h1>
-            <div class="maria"><b>Maria Rodriguez:</b> ${esc(pkg.maria)}</div>
-            <div class="scores">${scorecard(d.pkg)}</div>
-            ${dealBox(d)}
-            <div class="outcards ${host ? '' : 'mine-first'}">${roles.map((r) => roleOutcome(r, d)).join('')}</div>
-          </div>`;
-      }
-
-      case 'p6_reflect':
-        if (host) {
+        if (!host && isVoter()) {
           return `
             <div class="center narrow">
-              <div class="bigtimer" data-timer="big"></div>
-              <h1>STAKEHOLDER REFLECTION</h1>
-              <p class="lead">Three short questions on your own device.</p>
-              <div data-dyn="count:reflections"></div>
-              <div data-dyn="reflections"></div>
+              <h1>Vote</h1>
+              <p class="lead">One vote per group: your group casts the choice most of its members vote for. Your spokesperson breaks ties.</p>
+              <div class="bigtimer side" data-timer></div>
+              <div data-dyn="pick:vote"></div>
+              <div data-dyn="voteprogress"></div>
             </div>`;
         }
-        return reflectForm();
-
-      case 'debrief':
         return `
-          <div class="center narrow reveal">
-            <div class="eyebrow">DEBRIEF</div>
-            <h1>Everyone agreed the EHR was broken.</h1>
-            <h1 class="accent">So why was fixing it so hard?</h1>
-            ${stepList([
-              'Why did the hospital reach this decision?',
-              'What compromises were made, and who made them?',
-              'Whose priorities conflicted most?',
-              'What would have had to be true for everyone to say yes?',
-            ])}
-            <div data-dyn="finalboard"></div>
-            ${host ? '<div data-dyn="count:reflections"></div>' : reflectForm(true)}
+          <div class="center narrow">
+            <h1>The hospital votes</h1>
+            <p class="lead">${host ? 'Groups 1, 2, 3, 4, 6 and 7 cast one vote each. Results are sealed.' : 'Stay silent during voting. You will receive the decision from the CEO.'}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div data-dyn="voteprogress"></div>
           </div>`;
 
-      case 'reveal_cards': {
-        const cards = [
-          ['🧠', 'BEHAVIORAL ARCHITECTURE', 'People prefer familiar systems and perceive action differently from inaction.', 'Every package had flaws you could see. The current EHR’s flaws were familiar, so "keep it" stayed on the table.'],
-          ['💰', 'FINANCIAL ARCHITECTURE', 'The organization paying for an innovation may not capture its benefits.', 'The biggest package cost Penn General $5M and saved insurers $8M.'],
-          ['🩺', 'PROFESSIONAL ARCHITECTURE', "Changing technology changes people's jobs, responsibilities and authority.", 'Relief for physicians became verification work for nurses.'],
-          ['🕸️', 'NETWORK ARCHITECTURE', 'Health care changes require many interconnected people and systems to cooperate.', 'No team could choose alone. Every package needed nursing, physicians, finance and IT.'],
-          ['⚖️', 'ETHICAL / LEARNING ARCHITECTURE', 'Health systems need evidence that changes work—but evaluating real-world changes can itself create additional barriers.', 'Testing it locally first meant waiting longer for a fix everyone wanted.'],
-        ];
+      case 'p5_decision':
         return `
-          <div class="center">
-            <h1 class="huge">🎓 WHAT JUST HAPPENED?</h1>
-            <div class="archs">
-              ${cards
-                .map(
-                  ([icon, title, text, you], i) => `
-                <div class="arch" style="animation-delay:${0.5 + i * 0.9}s">
-                  <div class="arch-icon">${icon}</div>
-                  <div class="arch-title">${title}</div>
-                  <p>${text}</p>
-                  <p class="arch-you">${you}</p>
-                </div>`
-                )
-                .join('')}
-            </div>
-          </div>`;
-      }
-
-      case 'reveal_point':
-        return `
-          <div class="center narrow reveal point">
-            <div class="eyebrow">THE POINT</div>
-            <h1>A better technology does not automatically create a better health-care system.</h1>
-            <p class="lead">Successful innovation has to work with:</p>
-            <p class="formula">people + incentives + workflows + institutions + evidence</p>
-            <p class="lead">The EHR solved enormous problems with medical information.</p>
-            <p class="lead">It also created new problems like documentation burden, note bloat and alert fatigue.</p>
-            <p class="lead"><b>The next system may solve some of those problems.</b></p>
-            <h1 class="accent question">What new problems might it create?</h1>
+          <div class="center wide">
+            <h1>The decision</h1>
+            <div class="bigtimer side" data-timer></div>
+            <div data-dyn="decision"></div>
           </div>`;
 
+      case 'p6_replay':
+        return `
+          <div class="center wide">
+            <h1>${host ? 'Bed 14, replayed' : ['physician', 'nurse'].includes(role) ? 'Replay the case on the new system' : 'Watch bed 14 replay'}</h1>
+            <div data-dyn="replay"></div>
+          </div>`;
+
+      case 'p6_wrap':
+        return `
+          <div class="center wide reveal">
+            <h1 class="huge">Next cycle, we call the vendor again.</h1>
+            <div data-dyn="wrap"></div>
+          </div>`;
       default:
         return '';
     }
-  }
-
-  // ---------- reflection form ----------
-
-  const reflectDraft = { rating: null, think: '', missing: '', changes: '' };
-  let reflectTimer = null;
-
-  function reflectForm(compact) {
-    Object.assign(reflectDraft, S.you.reflection || {});
-    const area = (key, label) => `
-      <label class="field">${label}
-        <textarea data-reflect="${key}" rows="3" maxlength="600">${esc(reflectDraft[key])}</textarea>
-      </label>`;
-    return `
-      <div class="${compact ? 'reflect compact' : 'center narrow reflect'}">
-        ${compact ? '<h2>Your reflection</h2>' : `<div class="bigtimer side" data-timer="big"></div><h1>STAKEHOLDER REFLECTION</h1><p class="lead">Answer as the ${ROLES[S.you.role].short.toLowerCase()} you played.</p>`}
-        <div class="field">How do you feel about the chosen proposal?
-          <div data-dyn="rating"></div>
-        </div>
-        ${area('think', 'What do you think of the proposal the hospital chose?')}
-        ${area('missing', 'What would you have liked to see included?')}
-        ${area('changes', 'What changes would you recommend?')}
-        <p class="muted small" id="reflect-saved">Your answers save as you type.</p>
-      </div>`;
-  }
-
-  function saveReflection(delay) {
-    clearTimeout(reflectTimer);
-    reflectTimer = setTimeout(async () => {
-      const res = await act('reflect', reflectDraft);
-      const note = document.getElementById('reflect-saved');
-      if (res && note) note.textContent = 'Saved ✓';
-    }, delay);
-  }
-
-  function exportCsv() {
-    const cell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    const rows = [['role', 'rating_1_to_5', 'thoughts_on_proposal', 'would_have_liked_included', 'recommended_changes']];
-    for (const r of S.reflections) rows.push([ROLES[r.role].short, r.rating, r.think, r.missing, r.changes]);
-    const blob = new Blob(['﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `fix-the-hospital-reflections-${S.code}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
   }
 
   // ---------- chrome ----------
 
   function topbar() {
     const ph = S.phase;
-    const pill = ph >= 1 && ph <= 6 ? `PHASE ${ph}/6` : ph === 7 ? 'DEBRIEF' : 'LOBBY';
-    const dots = [1, 2, 3, 4, 5, 6]
-      .map((i) => `<i class="${i < ph ? 'done' : i === ph ? 'now' : ''}"></i>`)
-      .join('');
+    const pill = ph >= 1 && ph <= 6 ? `PHASE ${ph}/6` : 'LOBBY';
+    const dots = [1, 2, 3, 4, 5, 6].map((i) => `<i class="${i < ph ? 'done' : i === ph ? 'now' : ''}"></i>`).join('');
     const right = S.isHost
       ? `<span class="chip">ROOM <b>${esc(S.code)}</b></span>`
       : S.you.role
@@ -1120,13 +1377,14 @@
         : `<span class="chip">${esc(S.you.name)}</span>`;
     return `
       <header class="topbar">
-        <div class="brand">🏥 <span>FIX THE HOSPITAL</span></div>
+        <div class="brand">🏥 <span>BED 14</span><small class="fictional">Fictional teaching case, not for clinical use</small></div>
         <div class="progress">
           <span class="pill">${pill}</span>
-          <span class="roundname">${PHASE_TITLES[ph] || ''}</span>
+          <span class="roundname">${PHASE_TITLES[ph] || ''}${STEP_TITLES[S.step] ? ` · ${STEP_TITLES[S.step].toUpperCase()}` : ''}</span>
           <span class="dotrow">${dots}</span>
         </div>
         <div class="topright">
+          <span class="session" data-session></span>
           <span class="timer hidden" data-timer></span>
           ${right}
         </div>
@@ -1136,17 +1394,17 @@
 
   function hostbar() {
     const lobby = S.step === 'lobby';
-    const last = S.step === 'reveal_point';
-    const timed = S.timerTotal && S.step !== 'p1_ehr';
-    const nextLabel = lobby ? 'BEGIN SIMULATION' : S.step === 'p1_intro' ? 'START THE SIMULATION ▶' : 'NEXT ▶';
+    const last = S.step === 'p6_wrap';
+    const timed = S.timerTotal && !S.fixed;
+    const nextLabel = lobby ? 'BEGIN' : S.step === 'p1_intro' ? 'START THE SIMULATION ▶' : 'NEXT ▶';
     return `
       <footer class="hostbar">
         ${lobby ? '<button class="btn ghost" data-act="leave">Close room</button>' : '<button class="btn" data-act="back">◀ BACK</button>'}
         <span class="hostbar-info" data-dyn="pcount"></span>
+        <button class="btn" data-act="dashboard">📋 DASHBOARD</button>
+        ${S.timerTotal ? (S.paused ? '<button class="btn primary" data-act="resume">▶ RESUME</button>' : '<button class="btn" data-act="pause">⏸ PAUSE</button>') : ''}
         ${timed ? '<button class="btn" data-act="timer-add">+1 MIN</button><button class="btn" data-act="timer-restart">RESTART TIMER</button>' : ''}
-        ${S.phase >= 6 && S.step !== 'p6_decision' && S.step !== 'p6_sim' ? '<button class="btn" data-act="export">⬇ REFLECTIONS (CSV)</button>' : ''}
         <span class="spacer"></span>
-        ${!lobby && S.phase < 7 ? '<button class="btn danger" data-act="end">SKIP TO DEBRIEF</button>' : ''}
         ${last ? '' : `<button class="btn primary" data-act="next">${nextLabel}</button>`}
       </footer>`;
   }
@@ -1154,388 +1412,261 @@
   // ---------- live regions ----------
 
   function setHtml(el, html) {
-    if (el._html !== html) {
-      el.innerHTML = html;
-      el._html = html;
-    }
+    if (el._html === html) return;
+    // Keep whatever the player is typing (fields with a name) when the region redraws.
+    const typed = Object.fromEntries([...el.querySelectorAll('[name]')].map((i) => [i.name, i.value]));
+    const focused = el.contains(document.activeElement) && document.activeElement.name;
+    el.innerHTML = html;
+    el._html = html;
+    for (const i of el.querySelectorAll('[name]')) if (typed[i.name]) i.value = typed[i.name];
+    if (focused) el.querySelector(`[name="${focused}"]`)?.focus();
   }
 
-  // Horizontal bars that are built once, so widths animate as numbers change.
-  function bars(el, rows, total, unit) {
-    const sig = rows.map((r) => r.k).join(',');
-    if (el._sig !== sig) {
-      el._html = null;
-      el.classList.add('bars');
-      el.innerHTML =
-        rows
-          .map(
-            (r) => `
-          <div class="bar-row" data-opt="${r.k}">
-            <div class="bar-label">${r.label}</div>
-            <div class="bar-track"><div class="bar-fill ${r.cls || ''}"></div></div>
-            <div class="bar-pct"></div>
-          </div>`
-          )
-          .join('') + '<div class="bar-total muted small"></div>';
-      el._sig = sig;
-    }
-    for (const r of rows) {
-      const row = el.querySelector(`[data-opt="${r.k}"]`);
-      row.querySelector('.bar-fill').style.width = `${pct(r.n, total)}%`;
-      row.querySelector('.bar-pct').textContent = unit === 'count' ? r.n : `${pct(r.n, total)}%`;
-    }
-    el.querySelector('.bar-total').textContent = unit === 'count' ? '' : plural(total, 'vote');
-  }
 
-  const pkgRows = (tally) =>
-    BALLOT_ORDER.map((id) => ({ k: id, label: id === 'keep' ? 'Keep current' : `${PACKAGES[id].letter} · ${PACKAGES[id].name}`, cls: `p${id}`, n: tally.counts[id] }));
-
-  function byRoleHtml(tally) {
-    const rows = ROLE_ORDER.map((role) => {
-      const c = tally.byRole[role] || {};
-      const segs = BALLOT_ORDER.map((id) => (c[id] ? `<div class="seg p${id}" style="flex:${c[id]}">${PACKAGES[id].letter === '—' ? 'keep' : PACKAGES[id].letter} ${c[id]}</div>` : '')).join('');
-      return `
-        <div class="role-row">
-          <div class="role-name">${ROLES[role].icon} ${ROLES[role].short}</div>
-          <div class="segs">${segs || '<div class="seg none">no votes</div>'}</div>
-        </div>`;
-    }).join('');
-    return rows;
-  }
-
-  function modSupport(tally, pkgId) {
-    return MODS.map((m) => {
-      const share = pct(tally.mods[m.id], tally.total);
-      const na = pkgId && !m.applies.includes(pkgId);
-      return `
-        <div class="modbar ${share > 50 && !na ? 'in' : ''} ${na ? 'na' : ''}">
-          <span class="modbar-fill" style="width:${share}%"></span>
-          <span class="modbar-label">${ROLES[m.role].icon} ${esc(m.label)}</span>
-          <span class="modbar-pct">${share}%</span>
-        </div>`;
-    }).join('');
-  }
-
-  const leader = (tally) => (tally.total ? [...BALLOT_ORDER].sort((a, b) => tally.counts[b] - tally.counts[a] || PACKAGES[a].cost - PACKAGES[b].cost)[0] : null);
+  const groupLabel = (g) => `${GROUPS[g].icon} ${esc(GROUPS[g].short)}`;
 
   const DYN = {
-    count(el, what) {
-      const labels = { reports: 'have logged problems', top: 'have starred their top problems', straw: 'have taken a position', final: 'have voted', reflections: 'reflections submitted' };
-      setHtml(el, `<p class="votedcount"><b>${S.counts[what]}</b> of ${S.playerCount} ${labels[what]}</p>`);
-    },
-
     pcount(el) {
       const here = S.players.filter((p) => p.connected).length;
       setHtml(el, `👥 ${plural(S.playerCount, 'player')}${here < S.playerCount ? ` (${here} online)` : ''}`);
     },
 
     lobbyhost(el) {
-      const counts = ROLE_ORDER.map(
-        (key) => `<div class="rolecount"><span>${ROLES[key].icon}</span><b>${S.roleCounts[key]}</b><small>${ROLES[key].plural}</small></div>`
-      ).join('');
-      const names = S.players
-        .map(
-          (p) =>
-            `<span class="namechip ${p.connected ? '' : 'away'}">${p.role ? ROLES[p.role].icon : '…'} ${esc(p.name)}<button title="Remove" data-act="kick" data-pub="${p.pub}">✕</button></span>`
-        )
-        .join('');
-      setHtml(
-        el,
-        `<div class="joined"><b>${S.playerCount}</b> player${S.playerCount === 1 ? '' : 's'} joined</div>
-         <div class="rolecounts">${counts}</div>
-         <div class="names">${names}</div>`
-      );
+      const counts = ROLE_ORDER.map((key) => `<div class="rolecount"><span>${ROLES[key].icon}</span><b>${S.roleCounts[key]}</b><small>${ROLES[key].short}</small></div>`).join('');
+      const names = S.players.map((p) =>
+        `<span class="namechip ${p.connected ? '' : 'away'}">${p.role ? ROLES[p.role].icon : '…'} ${esc(p.name)}<button title="Remove" data-act="kick" data-pub="${p.pub}">✕</button></span>`).join('');
+      setHtml(el, `<div class="joined"><b>${S.playerCount}</b> player${S.playerCount === 1 ? '' : 's'} joined</div><div class="rolecounts nine">${counts}</div><div class="names">${names}</div>`);
     },
 
     rolepick(el) {
-      setHtml(
-        el,
-        ROLE_ORDER.map((key) => {
-          const r = ROLES[key];
-          return `
+      setHtml(el, Object.keys(GROUPS).map((g) => {
+        const roles = ROLE_ORDER.filter((r) => String(ROLES[r].group) === g);
+        return `<div class="rolegroup"><div class="eyebrow">GROUP ${g} · ${esc(GROUPS[g].name.toUpperCase())}${VOTING_GROUPS.includes(Number(g)) ? '' : ' · NO VOTE'}</div>
+          <div class="rolegrid">${roles.map((key) => `
             <button class="rolepick" data-act="role" data-role="${key}">
-              <span class="rolepick-icon">${r.icon}</span>
-              <span class="rolepick-name">${r.name}</span>
-              <span class="rolepick-text">${esc(r.priority)}</span>
+              <span class="rolepick-icon">${ROLES[key].icon}</span>
+              <span class="rolepick-name">${ROLES[key].name}</span>
+              <span class="rolepick-text">${esc(ROLES[key].who)}</span>
               <span class="rolepick-count">${S.roleCounts[key]} joined</span>
+            </button>`).join('')}</div></div>`;
+      }).join(''));
+    },
+
+    simhost(el) {
+      const { physician, nurse } = S.sim;
+      const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+      setHtml(el, `<div class="stats">
+        ${stat(physician.handled + nurse.handled, 'alerts cleared by the clinicians')}
+        ${stat(physician.overridden + nurse.overridden, 'cleared with one "override all" click')}
+        ${stat(physician.crit.aki ? physician.crit.aki.act : 0, 'physicians acted on the kidney alert')}
+        ${stat(nurse.crit.ews ? nurse.crit.ews.act : 0, 'nurses acted on the EWS 5 alert')}
+      </div>`);
+    },
+
+    quiz(el) {
+      const now = quizNow();
+      const q = now.q;
+      const watcher = S.isHost || !mySimSide();
+      const head = `<div class="qhead"><span>Question ${now.idx + 1} of ${QUIZ.length}</span><span class="qleft" data-qleft>${now.reveal ? '' : `${now.left}s`}</span></div><div class="qtext">${esc(q.q)}</div>`;
+      const reveal = now.reveal ? `
+        <div class="qreveal">
+          <div class="qanswer">${esc(q.answer)}</div>
+          <div class="covers">${q.problems.map((id) => problemChip(id, 'ok')).join('')}</div>
+          ${q.clue && CLUE[q.clue] ? `<p class="small muted">Where it was buried: ${esc(CLUE[q.clue].where)}</p>` : ''}
+        </div>` : '';
+      if (watcher) {
+        const both = (side, label) => `<div><div class="eyebrow">${label}</div>${answerBars(q, quizCounts(q, side), now.reveal)}</div>`;
+        setHtml(el, `${head}<div class="twocol">${both('physician', '🧑‍⚕️ PHYSICIAN SIDE')}${both('nurse', '👩‍⚕️ NURSE SIDE')}</div>${reveal}`);
+        return;
+      }
+      const mine = S.you.quiz[q.id];
+      const opts = `<div class="votes ${q.options.length > 2 ? 'grid' : 'grid'}">${q.options.map((o, i) => `
+        <button class="votebtn ${mine === i ? 'on' : ''} ${now.reveal && q.correct === i ? 'yes on' : ''}" data-act="quiz" data-q="${q.id}" data-n="${i}" ${now.reveal ? 'disabled' : ''}>${esc(o)}</button>`).join('')}</div>`;
+      let verdict = '';
+      if (now.reveal) {
+        const opened = S.you.sim && S.you.sim.chart.clues.includes(q.clue);
+        if (q.correct !== null) verdict = mine == null ? '<p class="muted">No answer.</p>' : mine === q.correct ? '<p class="ok"><b>✓ Right.</b></p>' : '<p class="red"><b>✗ Not quite.</b></p>';
+        verdict += q.clue ? `<p class="small">${opened ? 'You opened this clue during the simulation.' : 'You never opened this clue during the simulation.'}</p>` : '';
+        verdict += `<div class="small muted">Your team:</div>${answerBars(q, quizCounts(q, mySimSide()), true)}`;
+      }
+      setHtml(el, head + opts + reveal + verdict);
+    },
+
+    rank(el) {
+      const mine = S.you.rank;
+      const team = S.problems.teamTop[S.you.role] || [];
+      setHtml(el, `<p class="muted small">${mine.length} of ${RANK_PICKS} ranked. ★ = came up in the quiz.</p><div class="probs">` +
+        PROBLEMS.map((p) => {
+          const pos = mine.indexOf(p.id);
+          return `
+            <button class="prow ${pos >= 0 ? 'on' : ''}" data-act="rank" data-id="${p.id}" ${pos < 0 && mine.length >= RANK_PICKS ? 'disabled' : ''}>
+              <span class="prow-check">${pos >= 0 ? pos + 1 : ''}</span>
+              <span><b>${p.id} · ${esc(p.label)}</b><small>${esc(p.desc)}</small></span>
+              <span class="prow-cat">${QUIZ_PROBLEMS.has(p.id) ? '★' : ''}${team.includes(p.id) ? ` team #${team.indexOf(p.id) + 1}` : ''}</span>
             </button>`;
-        }).join('')
-      );
+        }).join('') + '</div>');
     },
 
-    ehrhost(el) {
-      const total = S.ehr.physician.dismissed + S.ehr.nurse.dismissed;
-      setHtml(el, `<div class="counter"><b>${total}</b><span>alerts dismissed by the hospital so far</span></div>`);
-    },
-
-    ehrstats(el) {
-      const { physician, nurse } = S.ehr;
-      const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
-      const parts = [];
-      const total = physician.dismissed + nurse.dismissed;
-      if (total) parts.push(`<div class="stat"><b>${total}</b><span>alerts dismissed by the hospital</span></div>`);
-      if (physician.critSeen) parts.push(`<div class="stat"><b>${secs(physician.critMedianMs)}</b><span>median time the allergy alert stayed on a physician's screen</span></div>`);
-      if (nurse.critSeen) parts.push(`<div class="stat"><b>${secs(nurse.critMedianMs)}</b><span>median time the potassium alert stayed on a nurse's screen</span></div>`);
-      if (nurse.players) {
-        parts.push(`<div class="stat"><b>${nurse.gaveKcl}</b><span>gave potassium to a patient with a potassium of 6.2</span></div>`);
-        parts.push(`<div class="stat"><b>${nurse.gaveAmox}</b><span>gave amoxicillin to a patient with a penicillin allergy</span></div>`);
-      }
-      const mine = [];
-      const e = !S.isHost && S.you.ehr;
-      if (e && typeof e.critMs === 'number') mine.push(`You dismissed that alert after <b class="accent">${secs(e.critMs)}</b>.`);
-      if (e && e.given.includes('kcl')) mine.push('You documented <b class="red">potassium chloride</b> as given.');
-      if (e && e.given.includes('amox')) mine.push('You documented <b class="red">amoxicillin</b> as given. Maria is allergic to penicillin.');
-      setHtml(el, (parts.length ? `<div class="stats">${parts.join('')}</div>` : '') + mine.map((m) => `<p class="lead">${m}</p>`).join(''));
-    },
-
-    report(el) {
-      const mine = new Set(S.you.report.problems);
-      setHtml(
-        el,
-        '<div class="probs">' +
-          PROBLEMS.map(
-            (p) => `
-            <button class="prow ${mine.has(p.id) ? 'on' : ''}" data-act="report" data-id="${p.id}">
-              <span class="prow-check">${mine.has(p.id) ? '✓' : ''}</span>
-              <span><b>${esc(p.label)}</b><small>${esc(p.desc)}</small></span>
-              <span class="prow-cat">${p.cat}</span>
-            </button>`
-          ).join('') +
-          '</div>'
-      );
-    },
-
-    reportbars(el) {
-      const rows = PROBLEMS.map((p) => ({ k: p.id, label: esc(p.label), n: S.problems[p.id].reports }));
-      bars(el, rows, Math.max(1, S.counts.reports), 'count');
-    },
-
-    rep(el) {
-      const name = S.reps[S.you.role];
-      setHtml(
-        el,
-        S.you.isRep
-          ? `<div class="repbadge mine">⭐ You are the ${ROLES[S.you.role].short} representative. You speak for your team.</div>`
-          : name ? `<div class="repbadge">Your representative: <b>${esc(name)}</b></div>` : ''
-      );
-    },
-
-    reps(el) {
-      setHtml(
-        el,
-        '<div class="eyebrow">REPRESENTATIVES</div><div class="rolecounts">' +
-          ROLE_ORDER.map(
-            (r) => `<div class="rolecount"><span>${ROLES[r].icon}</span><b class="repname">${esc(S.reps[r] || '—')}</b><small>${ROLES[r].short}</small></div>`
-          ).join('') +
-          '</div>'
-      );
-    },
-
-    // Team huddle: what this role's team reported, and each member's three stars.
-    intra(el) {
-      const role = S.you.role;
-      const size = S.roleCounts[role];
-      const mine = new Set(S.you.top);
-      const full = mine.size >= TOP_PICKS;
-      const rows = [...PROBLEMS].sort(
-        (a, b) => (S.problems[b.id].reportsByRole[role] || 0) - (S.problems[a.id].reportsByRole[role] || 0) || PROBLEMS.indexOf(a) - PROBLEMS.indexOf(b)
-      );
-      setHtml(
-        el,
-        `<p class="muted small">${mine.size} of ${TOP_PICKS} stars used</p><div class="probs">` +
-          rows
-            .map((p) => {
-              const seen = S.problems[p.id].reportsByRole[role] || 0;
-              const stars = S.problems[p.id].topByRole[role] || 0;
-              const on = mine.has(p.id);
-              return `
-              <button class="prow star ${on ? 'on' : ''}" data-act="top" data-id="${p.id}" ${!on && full ? 'disabled' : ''}>
-                <span class="prow-check">${on ? '★' : '☆'}</span>
-                <span><b>${esc(p.label)}</b><small>${seen ? `Noticed by ${seen} of ${size} on your team` : 'Nobody on your team logged this'}</small></span>
-                <span class="prow-cat">${stars ? `★ ${stars}` : ''}</span>
-              </button>`;
-            })
-            .join('') +
-          '</div>'
-      );
-    },
-
-    teamtop(el) {
-      const role = S.you.role;
-      const top = byRank()
-        .filter((p) => S.problems[p.id].topByRole[role])
-        .sort((a, b) => S.problems[b.id].topByRole[role] - S.problems[a.id].topByRole[role])
-        .slice(0, TOP_PICKS);
-      setHtml(
-        el,
-        top.length
-          ? `<div class="talking"><div class="eyebrow">YOUR TEAM'S TALKING POINTS</div>${top.map((p) => `<span class="pchip">★ ${esc(p.label)}</span>`).join('')}</div>`
-          : ''
-      );
-    },
-
-    board(el) {
-      const card = (p) => {
-        const b = S.problems[p.id];
-        const icons = ROLE_ORDER.filter((r) => b.topByRole[r]).map((r) => ROLES[r].icon).join(' ');
-        const inner = `<b>${esc(p.label)}</b><small>${esc(p.desc)}</small><span class="pcard-meta">★ ${b.top} · ${icons || 'nobody'} </span>`;
-        return S.isHost
-          ? `<button class="pcard" data-act="tier" data-id="${p.id}">${inner}</button>`
-          : `<div class="pcard">${inner}</div>`;
+    teamtops(el) {
+      const col = (team, label) => {
+        const ids = S.problems.teamTop[team];
+        return `<div><div class="eyebrow">${label}</div>${ids.length ? `<ol class="topfive">${ids.map((id) => `<li><b>${id} · ${esc(PROBLEM[id].label)}</b></li>`).join('')}</ol>` : '<p class="muted">Ranking…</p>'}</div>`;
       };
-      setHtml(
-        el,
-        '<div class="board">' +
-          TIERS.map((tier) => {
-            const list = inTier(tier);
-            return `<div class="tiercol ${tier.k}"><div class="tiercol-head">${tier.label} <span>${list.length}</span></div><div class="tiercol-hint">${tier.hint}</div>${list.map(card).join('')}</div>`;
-          }).join('') +
-          '</div>'
-      );
+      setHtml(el, `<div class="split">${col('physician', '🧑‍⚕️ PHYSICIAN TEAM')}${col('nurse', '👩‍⚕️ NURSE TEAM')}</div>`);
     },
 
-    others(el) {
-      setHtml(
-        el,
-        S.others.length
-          ? `<div class="eyebrow">ALSO WRITTEN IN</div><div class="names">${S.others.map((o) => `<span class="namechip plain">${ROLES[o.role].icon} ${esc(o.text)}</span>`).join('')}</div>`
-          : ''
-      );
-    },
-
-    critical(el) {
-      setHtml(
-        el,
-        '<div class="critlist"><div class="eyebrow">PENN GENERAL\'S CRITICAL PROBLEMS</div>' +
-          inTier(TIERS[0]).map((p, i) => `<div class="critrow" style="animation-delay:${0.6 + i * 0.35}s"><b>${i + 1}.</b> ${esc(p.label)}<small>${esc(p.desc)}</small></div>`).join('') +
-          `<p class="muted small">Plus ${inTier(TIERS[1]).length} desirable and ${inTier(TIERS[2]).length} lower-priority problems.</p></div>`
-      );
-    },
-
-    packages(el) {
-      const critical = inTier(TIERS[0]);
-      setHtml(
-        el,
-        '<div class="pkgs">' +
-          PACKAGE_ORDER.map((id) => {
-            const pkg = PACKAGES[id];
-            const fixes = new Set(pkg.fixes);
-            const cover = TIERS.map((tier) => {
-              const list = inTier(tier);
-              return `<span class="cover ${tier.k}">${tier.label.split(' ')[0]} ${list.filter((p) => fixes.has(p.id)).length}/${list.length}</span>`;
-            }).join('');
-            const missed = critical.filter((p) => !fixes.has(p.id));
-            return `
-              <div class="pkg p${id}">
-                <div class="pkg-head"><span class="pkg-letter p${id}">${pkg.letter}</span><span>${pkg.icon} ${pkg.name}</span></div>
-                <p class="pkg-tag">${esc(pkg.tagline)}</p>
-                <div class="pkg-stats">
-                  <div><small>COST</small><b>${money(pkg.cost)}</b></div>
-                  <div><small>GO-LIVE</small><b>${pkg.months} mo</b></div>
-                  <div><small>WORKFLOW CHANGE</small><b>${pkg.change}</b></div>
-                </div>
-                <p class="small muted">Training: ${esc(pkg.training)}</p>
-                <ul class="pkg-features">${pkg.features.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-                <div class="covers">${cover}</div>
-                ${missed.length ? `<p class="pkg-miss">Leaves unfixed: ${missed.map((p) => esc(p.label)).join(' · ')}</p>` : '<p class="pkg-hit">Fixes every critical problem.</p>'}
-              </div>`;
-          }).join('') +
-          '</div>'
-      );
-    },
-
-    // Package choice plus the terms this player wants attached to it.
-    ballot(el, kind) {
-      const mine = S.you[kind] || { pkg: null, mods: [] };
-      const team = S.straw.byRole[S.you.role] || {};
-      const pkgs = BALLOT_ORDER.map((id) => {
-        const pkg = PACKAGES[id];
-        const teamCount = kind === 'straw' && team[id] ? `<span class="pkgbtn-team">team: ${team[id]}</span>` : '';
-        return `
-          <button class="pkgbtn p${id} ${mine.pkg === id ? 'on' : ''}" data-act="pkg" data-kind="${kind}" data-pkg="${id}">
-            <span class="pkg-letter p${id}">${pkg.letter}</span>
-            <span class="pkgbtn-name">${pkg.icon} ${pkg.name}<small>${id === 'keep' ? 'No deal. $0.' : `${money(pkg.cost)} · ${pkg.months} months`}</small></span>
-            ${teamCount}
-          </button>`;
+    merged(el) {
+      const { board, teamTop, merged, top5 } = S.problems;
+      const rows = merged.map((id) => {
+        const tags = [teamTop.physician.includes(id) ? '🧑‍⚕️' : '', teamTop.nurse.includes(id) ? '👩‍⚕️' : ''].join('');
+        const pin = S.topOverride[id] === 'in' ? ' 📌' : S.topOverride[id] === 'out' ? ' ⛔' : '';
+        return `<button class="pcard ${top5.includes(id) ? 'intop' : ''}" data-act="top" data-id="${id}"><b>${id} · ${esc(PROBLEM[id].label)}${pin}</b><span class="pcard-meta">${tags || '—'} · ★ ${board[id].stars}</span></button>`;
       }).join('');
-      const mods = MODS.map((m) => {
-        const na = mine.pkg && !m.applies.includes(mine.pkg);
-        const on = mine.mods.includes(m.id) && !na;
-        const tags = [m.cost ? `+${money(m.cost)}` : '', m.months ? `+${m.months} mo` : '', m.discount ? `−${m.discount * 100}% cost` : ''].filter(Boolean).join(' · ');
-        return `
-          <button class="prow ${on ? 'on' : ''}" data-act="mod" data-kind="${kind}" data-mod="${m.id}" ${na ? 'disabled' : ''}>
-            <span class="prow-check">${on ? '✓' : ''}</span>
-            <span><b>${esc(m.label)}</b><small>${na ? 'Not applicable to this package' : esc(m.desc)}</small></span>
-            <span class="prow-cat">${tags}</span>
-          </button>`;
+      const missing = (S.problems.missing || []).map((t) => `<p class="red small"><b>${t === 'physician' ? 'Physician' : 'Nurse'} team ranking missing:</b> not submitted. The list uses the other team's ranking.</p>`).join('');
+      setHtml(el, `${missing}<div class="mergedlist">${rows}</div>`);
+    },
+
+    top5(el) {
+      const p = S.problems;
+      const status = p.locked ? '<p class="ok"><b>🔒 Confirmed.</b> This list goes to the vendor.</p>'
+        : !S.isHost && S.you.role === 'exec' && S.step === 'p3_discuss' ? '<button class="btn primary" data-act="confirm-top">CONFIRM THE TOP FIVE</button> <span class="small muted">Only the CEO can confirm. It locks the list.</span>'
+        : S.step === 'p3_discuss' ? '<p class="small muted">The CEO confirms the list. If time runs out, the current top five locks automatically.</p>' : '';
+      setHtml(el, topFiveList() + status);
+    },
+
+    lightning(el) {
+      const asked = new Map(S.questions.map((q) => [q.group, q]));
+      const list = S.questions.length
+        ? `<ol class="qlist">${S.questions.map((q) => `<li>${groupLabel(q.group)}${q.pkg ? ` → <b>${q.pkg}</b>` : ''}: ${esc(q.text)}</li>`).join('')}</ol>`
+        : '<p class="small muted">No lightning questions yet.</p>';
+      let form = '';
+      if (!S.isHost && myGroup() !== 5) {
+        const mine = asked.get(myGroup());
+        form = mine
+          ? `<p class="small">Your group asked: <i>${esc(mine.text)}</i></p>`
+          : `<div class="askform"><input data-question name="question" maxlength="300" placeholder="Your group's one lightning question">
+              <select data-question-pkg name="question-pkg"><option value="">Any package</option>${PACKAGE_ORDER.map((l) => `<option value="${l}">${l}. ${esc(PACKAGES[l].name)}</option>`).join('')}</select>
+              <button class="btn small" data-act="ask">ASK</button></div><p class="small muted">One question per group.</p>`;
+      }
+      setHtml(el, `<div class="taskcard"><div class="eyebrow">LIGHTNING QUESTIONS · ONE PER GROUP</div>${form}${list}</div>`);
+    },
+
+    vendorqa(el) {
+      const vendor = !S.isHost && myGroup() === 5;
+      const items = S.vendorQs.map((q) => `
+        <li><b>${groupLabel(q.group)}:</b> ${esc(q.text)}
+          ${q.answer ? `<div class="ok">Vendor: ${esc(q.answer)}</div>`
+            : vendor ? `<div class="askform"><input data-answer="${q.id}" name="answer-${q.id}" maxlength="400" placeholder="Your answer"><button class="btn small" data-act="answer" data-id="${q.id}">ANSWER</button></div>`
+            : '<div class="small muted">Waiting for the vendor…</div>'}</li>`).join('');
+      const form = !S.isHost && !vendor ? '<div class="askform"><input data-vq name="vq" maxlength="300" placeholder="Ask the vendor a question"><button class="btn small" data-act="vq">SEND</button></div>' : '';
+      setHtml(el, `<div class="taskcard"><div class="eyebrow">QUESTIONS FOR THE VENDOR</div>${form}${items ? `<ol class="qlist">${items}</ol>` : '<p class="small muted">No questions yet.</p>'}</div>`);
+    },
+
+    stars(el) {
+      const mine = new Set(S.you.stars);
+      const { board, teamTop, merged } = S.problems;
+      setHtml(el, `<p class="muted small">${mine.size} of 5 stars used. Sorted by the clinicians' merged ranking.</p><div class="probs">` +
+        merged.map((id) => {
+          const p = PROBLEM[id];
+          const on = mine.has(id);
+          const tags = [teamTop.physician.includes(id) ? '🧑‍⚕️' : '', teamTop.nurse.includes(id) ? '👩‍⚕️' : ''].join('');
+          return `
+            <button class="prow star ${on ? 'on' : ''}" data-act="star" data-id="${id}" ${!on && mine.size >= 5 ? 'disabled' : ''}>
+              <span class="prow-check">${on ? '★' : '☆'}</span>
+              <span><b>${id} · ${esc(p.label)}</b><small>${esc(p.desc)}</small></span>
+              <span class="prow-cat">${tags} ★${board[id].stars}</span>
+            </button>`;
+        }).join('') + '</div>');
+    },
+
+    pkcards(el) {
+      const vendor = !S.isHost && S.you.role === 'vendor';
+      setHtml(el, `<div class="pkcards">${PACKAGE_ORDER.map((l) => packageCard(l, { catches: vendor, host: S.isHost })).join('')}</div>`);
+    },
+
+    pick(el, slot) {
+      const current = slot === 'vote' ? S.you.vote : S.you.picks[slot];
+      setHtml(el, picker(slot, current));
+    },
+
+    myteam(el) {
+      const g = S.groups[myGroup()];
+      const rows = (tally) => Object.entries(tally).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<li><b>${esc(choiceShort(k))}</b> — ${n}</li>`).join('') || '<li class="muted">No picks yet</li>';
+      setHtml(el, `
+        <div class="taskcard"><p>Group first choice: <b>${g.first ? esc(choiceTitle(g.first)) : '—'}</b><br>Group second choice: <b>${g.second ? esc(choiceTitle(g.second)) : '—'}</b></p>
+          <div class="twocol"><div><div class="eyebrow">FIRST CHOICES</div><ul>${rows(g.firstTally)}</ul></div><div><div class="eyebrow">SECOND CHOICES</div><ul>${rows(g.secondTally)}</ul></div></div>
+          ${S.reps[myGroup()] ? `<p class="small muted">Spokesperson: ⭐ ${esc(S.reps[myGroup()])}</p>` : ''}</div>`);
+    },
+
+    groupboard(el) {
+      const rows = VOTING_GROUPS.map((g) => {
+        const x = S.groups[g];
+        const cell = (k) => (k ? `<b>${esc(choiceShort(k))}</b> <small>${money(C.choiceCost(k))}</small>` : '<span class="muted">—</span>');
+        return `<tr><td>${groupLabel(g)}</td><td>${cell(x.first)}</td><td>${cell(x.second)}</td><td>${x.members}</td></tr>`;
       }).join('');
-      setHtml(
-        el,
-        `<div class="pkgbtns">${pkgs}</div>
-         <div class="eyebrow">TERMS YOU WANT ATTACHED</div>
-         <div class="probs">${mods}</div>
-         ${kind === 'final' ? `<p class="votedcount">${mine.pkg ? `Your vote: <b>${esc(pkgTitle(mine.pkg))}</b>. You can change it until time runs out.` : 'You have not voted yet.'}</p>` : ''}`
-      );
+      setHtml(el, `<table class="combos"><tr><th>Group</th><th>First choice</th><th>Second choice</th><th>Members</th></tr>${rows}</table>`);
     },
 
-    strawboard(el) {
-      const t = S.straw;
-      if (!el._built) {
-        el.innerHTML = `
-          <div class="split three">
-            <div><div class="eyebrow">WHERE THE HOSPITAL STANDS</div><div data-part="bars"></div><div data-part="lead"></div></div>
-            <div><div class="eyebrow">BY ROLE</div><div data-part="roles"></div></div>
-            <div><div class="eyebrow">TERMS: SHARE WHO WANT EACH</div><div data-part="mods"></div></div>
+    voteprogress(el) {
+      setHtml(el, `<div class="rolecounts six">${VOTING_GROUPS.map((g) => `<div class="rolecount"><span>${GROUPS[g].icon}</span><b>${S.groups[g].voted}/${S.groups[g].members}</b><small>${esc(GROUPS[g].short)}</small></div>`).join('')}</div>`);
+    },
+
+    decision(el) {
+      const d = S.decision;
+      const { groupVotes, ranking } = S.results;
+      const role = S.isHost ? null : S.you.role;
+      const can = (who) => S.isHost || role === who;
+      const votes = VOTING_GROUPS.map((g) => `<div class="rolecount"><span>${GROUPS[g].icon}</span><b class="repname">${groupVotes[g] ? esc(choiceShort(groupVotes[g])) : '—'}</b><small>${esc(GROUPS[g].short)}</small></div>`).join('');
+      const place = (i) => (i === 0 ? 'Winner' : i === 1 ? 'Runner-up' : `${i + 1}`);
+      const rank = ranking.map((r, i) => `<tr class="${r.key === d.current ? 'cur' : ''}"><td>${place(i)}</td><td><b>${esc(choiceTitle(r.key))}</b></td><td>${r.groups}</td><td>${r.people}</td><td class="${r.cost > BUDGET ? 'red' : ''}">${money(r.cost)}</td></tr>`).join('');
+      const tie = S.results.tie;
+      const tieHtml = tie ? `<div class="taskcard tie"><b>Tie:</b> ${tie.keys.map((k) => esc(choiceShort(k))).join(' and ')} have ${tie.groups} group votes each. <b>Tie rule: the CFO breaks the tie.</b>
+          ${tie.broken ? ` The CFO chose ${esc(choiceShort(tie.broken))}.` : ' Until the CFO decides, the choice with more individual votes, then the cheaper one, leads; signing it off breaks the tie in its favor.'}
+          ${!d.final && can('finance') ? tie.keys.filter((k) => k !== d.current).map((k) => ` <button class="btn small" data-act="tiebreak" data-key="${k}">BREAK THE TIE FOR ${esc(choiceShort(k))}</button>`).join('') : ''}</div>` : '';
+      let action = '';
+      if (d.final) {
+        action = `
+          <div class="winner pk-${C.choiceLetters(d.final)[0]}">
+            <div class="eyebrow">THE HOSPITAL HAS DECIDED</div>
+            <h1>${esc(choiceTitle(d.final))}</h1>
+            <p>${money(C.choiceCost(d.final))} · fixes problems ${C.choiceFixes(d.final).join(', ')}${d.cfo === 'phased' ? ' · <b>phased contract</b>' : ''}${d.nogo ? ' · the runner-up, after a no-go' : ''}</p>
+            <p class="lead">${!S.isHost && role === 'exec' ? '<b>Announce it to the vendor.</b>' : 'The CEO announces the decision to the vendor.'}</p>
+            ${S.isHost ? '<button class="btn danger small" data-act="reset-decision">Reset decision (logged)</button>' : ''}
           </div>`;
-        el._built = true;
+      } else if (!d.current) {
+        action = '<p class="lead">No votes were cast.</p>';
+      } else {
+        const over = C.choiceCost(d.current) > BUDGET;
+        const cfoDone = d.cfo ? `<p class="ok">✓ CFO signed off${d.cfo === 'phased' ? ' as a phased contract' : ': fits the $12M budget'}.</p>` : '';
+        const cfoBtns = !d.cfo && can('finance')
+          ? `<button class="btn primary" data-act="decide" data-op="cfo_ok">${over ? 'APPROVE AS A PHASED CONTRACT' : 'SIGN OFF: FITS THE BUDGET'}</button>${over ? ' <button class="btn danger" data-act="decide" data-op="cfo_reject">REJECT: OVER BUDGET → RUNNER-UP</button>' : ''}`
+          : !d.cfo ? '<p class="muted">Waiting for the CFO to confirm the budget…</p>' : '';
+        const ceoBtns = d.cfo && can('exec')
+          ? `<button class="btn primary" data-act="decide" data-op="go">GO</button> <button class="btn danger" data-act="decide" data-op="nogo">NO-GO → RUNNER-UP</button>`
+          : d.cfo ? '<p class="muted">Waiting for the CEO and board: go or no-go…</p>' : '';
+        action = `<div class="taskcard"><div class="eyebrow">ON THE TABLE</div><h2>${esc(choiceTitle(d.current))}</h2><p>${choiceSummary(d.current)}</p>${cfoDone}${cfoBtns}${ceoBtns}</div>`;
       }
-      const top = leader(t);
-      bars(el.querySelector('[data-part=bars]'), pkgRows(t), t.total);
-      setHtml(el.querySelector('[data-part=roles]'), byRoleHtml(t));
-      setHtml(el.querySelector('[data-part=mods]'), modSupport(t, top));
-      setHtml(
-        el.querySelector('[data-part=lead]'),
-        top ? `<p class="leadline">Leading: <b>${esc(pkgTitle(top))}</b>${top === 'keep' ? '' : ` at ${money(PACKAGES[top].cost)}`}. The capital budget is a question for the CFO.</p>` : '<p class="muted">No positions yet.</p>'
-      );
+      setHtml(el, `
+        <div class="eyebrow">ONE VOTE PER GROUP</div><div class="rolecounts six">${votes}</div>
+        ${tieHtml}
+        <div class="split"><div><table class="combos"><tr><th>Place</th><th>Choice</th><th>Group votes</th><th>People</th><th>Cost</th></tr>${rank || '<tr><td colspan="5">No votes</td></tr>'}</table></div><div>${action}</div></div>`);
     },
 
-    finalboard(el) {
-      const t = S.final.total ? S.final : S.straw;
-      if (!el._built) {
-        el.innerHTML = `
-          <div class="split">
-            <div><div class="eyebrow">THE VOTE</div><div data-part="bars"></div></div>
-            <div><div class="eyebrow">BY ROLE</div><div data-part="roles"></div></div>
-          </div>`;
-        el._built = true;
-      }
-      bars(el.querySelector('[data-part=bars]'), pkgRows(t), t.total);
-      setHtml(el.querySelector('[data-part=roles]'), byRoleHtml(t));
+    replay(el) {
+      setHtml(el, replayHtml(S.isHost));
     },
 
-    rating(el) {
-      const faces = ['😡', '🙁', '😐', '🙂', '😍'];
-      setHtml(
-        el,
-        '<div class="rating">' +
-          faces.map((f, i) => `<button class="${reflectDraft.rating === i + 1 ? 'on' : ''}" data-act="rate" data-n="${i + 1}" aria-label="${i + 1} of 5">${f}</button>`).join('') +
-          '</div>'
-      );
-    },
-
-    reflections(el) {
-      const list = S.reflections;
-      const rated = list.filter((r) => r.rating);
-      const avg = rated.length ? (rated.reduce((s, r) => s + r.rating, 0) / rated.length).toFixed(1) : '—';
-      const quote = (label, text) => (text ? `<p><small>${label}</small>${esc(text)}</p>` : '');
-      setHtml(
-        el,
-        `<div class="stats"><div class="stat"><b>${avg}</b><span>average rating out of 5</span></div></div>
-         <div class="reflist">${list
-           .filter((r) => r.think || r.missing || r.changes)
-           .map((r) => `<div class="refcard"><div class="refcard-head">${ROLES[r.role].icon} ${ROLES[r.role].short}${r.rating ? ` · ${r.rating}/5` : ''}</div>${quote('THINKS', r.think)}${quote('MISSING', r.missing)}${quote('WOULD CHANGE', r.changes)}</div>`)
-           .join('')}</div>`
-      );
+    wrap(el) {
+      const key = finalChoice();
+      const fixed = new Set(key ? C.choiceFixes(key) : []);
+      const left = PROBLEMS.filter((p) => !fixed.has(p.id));
+      setHtml(el, `
+        <p class="lead">${key ? `The hospital bought <b>${esc(choiceTitle(key))}</b> for ${money(C.choiceCost(key))}.` : 'The hospital bought nothing this cycle.'}</p>
+        <div class="split">
+          <div><div class="eyebrow">FIXED THIS CYCLE (${fixed.size})</div><div class="covers">${[...fixed].map((id) => problemChip(id, 'ok')).join('') || '<span class="muted">None</span>'}</div></div>
+          <div><div class="eyebrow">CARRIED OVER TO THE NEXT VENDOR CYCLE (${left.length})</div><div class="covers">${left.map((p) => problemChip(p.id, p.id === 13 ? 'no13' : '')).join('')}</div>
+            <p class="small muted">No package fixes problem 13, poor interface design, so it always carries over.</p></div>
+        </div>`);
     },
   };
 
@@ -1544,33 +1675,26 @@
   function render() {
     if (!S) return;
     const needsRole = !S.isHost && (!S.you.role || (repick && S.step === 'lobby'));
-    const key = S.isHost ? `H:${S.step}` : `P:${needsRole ? 'pick' : S.step}`;
+    loadBriefs();
+    const key = S.isHost ? `H:${S.step}:${S.paused}` : `P:${needsRole ? 'pick' : S.step}`;
 
     if (key !== screenKey) {
       screenKey = key;
-      ehrStop();
+      quizKey = null;
+      simStop();
       const body = needsRole
         ? `<div class="center">
              <h1>Choose your role, ${esc(S.you.name)}</h1>
-             <p class="muted">Several people can share a role.</p>
-             <div class="rolegrid" data-dyn="rolepick"></div>
+             <p class="muted">Several people can share a role. Physicians and nurses play the bed 14 simulation.</p>
+             <div data-dyn="rolepick"></div>
              <button class="btn" data-act="role" data-role="random">🎲 Assign me randomly</button>
            </div>`
         : stage();
-      const wide = !S.isHost && !needsRole && (S.step === 'p1_ehr' || S.step === 'p6_sim');
+      const wide = !S.isHost && !needsRole && S.step === 'p1_sim' && mySimSide();
       document.body.className = [S.isHost ? 'host' : 'player', `step-${S.step}`, wide ? 'ehr-mode' : '', online ? '' : 'offline'].join(' ');
       app.innerHTML = `${topbar()}<main class="stage">${body}</main>${S.isHost ? hostbar() : ''}`;
       window.scrollTo(0, 0);
-      if (!S.isHost && !needsRole) {
-        const side = mySide();
-        if (S.step === 'p1_ehr') ehrStart(ALERTS[side], true);
-        // Unless the chosen package fixed alerting, the old interruptions are still there a year later.
-        if (S.step === 'p6_sim' && !PACKAGES[S.decision.pkg].fixes.includes('alerts')) {
-          const crit = ALERTS[side].find((a) => a.crit);
-          const replay = [ALERTS[side][0], ALERTS[side][1], crit, ALERTS[side][3], ALERTS[side][4]];
-          ehrStart(replay.map((a, i) => ({ ...a, t: 3 + i * 5 })), false);
-        }
-      }
+      if (wide) simStart(mySimSide());
     }
 
     document.querySelectorAll('[data-dyn]').forEach((el) => {
@@ -1582,15 +1706,41 @@
 
   // ---------- events ----------
 
-  let otherTimer = null;
-  // Read the text box directly: a state push may have replaced S since the last keystroke.
-  function sendReport() {
-    const input = document.querySelector('[data-other]');
-    return act('report', { problems: S.you.report.problems, other: input ? input.value : S.you.report.other });
+  const toggle = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  function pick(slot, letter) {
+    const current = slot === 'vote' ? S.you.vote : S.you.picks[slot];
+    let letters = C.choiceLetters(current);
+    if (letters.includes(letter)) letters = letters.filter((l) => l !== letter);
+    else if (letters.length >= 2) return toast('Choose at most two packages.');
+    else letters = [...letters, letter];
+    const key = C.normalizeChoice(letters);
+    if (slot === 'vote') {
+      S.you.vote = key;
+      render();
+      return key ? act('vote', { choice: key }) : null;
+    }
+    S.you.picks = { ...S.you.picks, [slot]: key };
+    render();
+    return act('picks', S.you.picks);
   }
 
-  function toggle(list, id) {
-    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  function simMar(id, op) {
+    const med = DUE.find((m) => m.id === id);
+    if (!med || sim.chart.mar[id]) return;
+    if (op === 'hold') sim.chart.mar[id] = 'held';
+    else if (op === 'scan' && med.fail && !sim.open[`fail:${id}`]) sim.open[`fail:${id}`] = true;
+    else sim.chart.mar[id] = 'given';
+    refresh();
+    simSave();
+  }
+
+  function simFlow(form) {
+    const inputs = [...document.querySelectorAll(`[data-flow="${form}"]`)];
+    if (inputs.some((i) => !i.value.trim())) return toast('Required fields are missing.');
+    if (!sim.chart.flow.includes(form)) sim.chart.flow.push(form);
+    refresh();
+    simSave();
   }
 
   document.addEventListener('click', async (e) => {
@@ -1616,7 +1766,7 @@
         }
         return;
       case 'resume-host':
-        return startSession(store.get(localStorage, 'fth_host'));
+        return startSession(store.get(localStorage, 'b14_host'));
       case 'leave':
         if (confirm('Leave this room? You will not be able to host it again from this browser.')) leave();
         return;
@@ -1624,60 +1774,114 @@
         repick = false;
         return act('role', { role: el.dataset.role });
       case 'rerole':
-        // Dropping back to the picker is local; the server keeps the old role until a new one is chosen.
         repick = true;
         return render();
-      case 'dismiss':
-        return ehrDismiss();
-      case 'mar':
-        return marClick(el.dataset.med);
-      case 'report':
-        S.you.report.problems = toggle(S.you.report.problems, el.dataset.id);
-        render();
-        return sendReport();
-      case 'top':
-        S.you.top = toggle(S.you.top, el.dataset.id).slice(0, TOP_PICKS);
-        render();
-        return act('top', { problems: S.you.top });
-      case 'tier':
-        return act('tier', { id: el.dataset.id });
-      case 'pkg':
-      case 'mod': {
-        const kind = el.dataset.kind;
-        const mine = S.you[kind] || { pkg: null, mods: [] };
-        if (a === 'pkg') mine.pkg = el.dataset.pkg;
-        else if (!mine.pkg) return toast('Choose a package first.');
-        else mine.mods = toggle(mine.mods, el.dataset.mod);
-        S.you[kind] = mine;
-        render();
-        return act('ballot', { kind, pkg: mine.pkg, mods: mine.mods });
+
+      // Phase 1
+      case 'sim-tab':
+        return sim.down || showTab(el.dataset.tab);
+      case 'sim-alert':
+        return alertAction(el.dataset.a);
+      case 'sim-open':
+        return toggleOpen(el.dataset.key, el.dataset.clues);
+      case 'sim-notes':
+        sim.notesTab = el.dataset.sub;
+        return refresh();
+      case 'sim-fax':
+        sim.fax = Math.min(FAX_PAGES, Math.max(1, sim.fax + Number(el.dataset.d)));
+        return refresh();
+      case 'sim-tx':
+        sim.tx++;
+        return refresh();
+      case 'sim-mar':
+        return simMar(el.dataset.med, el.dataset.op);
+      case 'sim-flow':
+        return simFlow(el.dataset.form);
+      case 'sim-assess':
+        sim.assessDone.add(el.dataset.name);
+        sim.chart.assess = sim.assessDone.size;
+        refresh();
+        return simSave();
+      case 'sim-reply':
+        return reply(el.dataset.id, Number(el.dataset.n));
+      case 'sim-dec':
+        return decide(el.dataset.id, el.dataset.opt);
+      case 'sim-side':
+        return sideTab(el.dataset.side);
+      case 'finding-add':
+        return addFinding();
+      case 'sim-sign': {
+        const msg = document.querySelector('[data-signfail]');
+        if (msg) msg.textContent = "Signing failed: orders won't sign while MedChart is down.";
+        return toast("Orders won't sign: MedChart is not responding.");
       }
-      case 'rate':
-        reflectDraft.rating = Number(el.dataset.n);
+
+      // Phase 2
+      case 'quiz':
+        S.you.quiz[el.dataset.q] = Number(el.dataset.n);
+        DYN.quiz(document.querySelector('[data-dyn="quiz"]'));
+        return act('quiz', { q: el.dataset.q, n: Number(el.dataset.n) });
+      case 'rank':
+        S.you.rank = toggle(S.you.rank, Number(el.dataset.id)).slice(0, RANK_PICKS);
         render();
-        return saveReflection(0);
-      case 'export':
-        return exportCsv();
-      case 'showrole': {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.dataset.act = 'closemodal';
-        modal.innerHTML = `<div class="modal-box">${roleCard(S.you.role)}${S.phase >= 4 ? roleBrief(S.you.role) : ''}<button class="btn" data-act="closemodal">Close</button></div>`;
-        document.body.appendChild(modal);
+        return act('rank', { ids: S.you.rank });
+
+      // Phase 3
+      case 'star':
+        S.you.stars = toggle(S.you.stars, Number(el.dataset.id)).slice(0, 5);
+        render();
+        return act('stars', { ids: S.you.stars });
+      case 'top':
+        return S.isHost ? act('top', { id: Number(el.dataset.id) }) : null;
+
+      // Phases 4 and 5
+      case 'catch':
+        return act('catch', { pkg: el.dataset.pkg });
+      case 'confirm-top':
+        return act('confirm_top');
+      case 'ask': {
+        const text = document.querySelector('[data-question]');
+        const pkg = document.querySelector('[data-question-pkg]');
+        if (!text || !text.value.trim()) return toast('Write your question first.');
+        const res = await act('question', { text: text.value, pkg: pkg ? pkg.value : '' });
+        if (res) text.value = '';
         return;
       }
+      case 'vq': {
+        const text = document.querySelector('[data-vq]');
+        if (!text || !text.value.trim()) return toast('Write your question first.');
+        const res = await act('vendor_question', { text: text.value });
+        if (res) text.value = '';
+        return;
+      }
+      case 'answer': {
+        const text = document.querySelector(`[data-answer="${el.dataset.id}"]`);
+        if (!text || !text.value.trim()) return toast('Write your answer first.');
+        return act('vendor_answer', { id: Number(el.dataset.id), text: text.value });
+      }
+      case 'tiebreak':
+        return act('decide', { op: 'tiebreak', key: el.dataset.key });
+      case 'reset-decision':
+        if (confirm('Reset the decision? The reset is logged.')) act('reset_decision');
+        return;
+      case 'dashboard':
+        return openModal(dashboardHtml());
+      case 'pause':
+      case 'resume':
+        return act(a);
+      case 'pick':
+        return pick(el.dataset.slot, el.dataset.pkg);
+      case 'decide':
+        return act('decide', { op: el.dataset.op });
+
+      case 'showrole':
+        return openModal(myBriefs(S.phase >= 3));
       case 'closemodal':
-        if (e.target === el) {
-          const modal = document.querySelector('.modal');
-          if (modal) modal.remove();
-        }
+        if (e.target === el) document.querySelector('.modal')?.remove();
         return;
       case 'next':
       case 'back':
         return act(a);
-      case 'end':
-        if (confirm('Skip ahead to the debrief on every screen?')) act('end');
-        return;
       case 'timer-add':
         return act('timer', { op: 'add' });
       case 'timer-restart':
@@ -1701,23 +1905,30 @@
     }
   });
 
-  document.addEventListener('input', (e) => {
-    if (e.target.matches('[data-other]')) {
-      S.you.report.other = e.target.value;
-      clearTimeout(otherTimer);
-      otherTimer = setTimeout(sendReport, 400);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('[data-test=finding-text], [data-test=finding-screen]')) {
+      e.preventDefault();
+      addFinding();
     }
-    if (e.target.matches('[data-reflect]')) {
-      reflectDraft[e.target.dataset.reflect] = e.target.value;
-      const note = document.getElementById('reflect-saved');
-      if (note) note.textContent = 'Saving…';
-      saveReflection(500);
+  });
+
+  document.addEventListener('input', (e) => {
+    if (!sim.active) return;
+    const t = e.target;
+    if (t.matches('[data-simnotes]')) {
+      sim.chart.notes = t.value;
+      simSave();
+    } else if (t.matches('[data-simdec]')) {
+      sim.chart.decisions[t.dataset.simdec] = t.value;
+      simSave();
+    } else if (t.matches('[data-flow]')) {
+      sim.flowVals[t.dataset.flow] = { ...sim.flowVals[t.dataset.flow], [t.dataset.field]: t.value };
     }
   });
 
   // ---------- boot ----------
 
-  session = store.get(sessionStorage, 'fth_session');
+  session = store.get(sessionStorage, 'b14_session');
   if (session && session.code) connect();
   else renderHome();
 })();

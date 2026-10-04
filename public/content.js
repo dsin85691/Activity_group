@@ -1,240 +1,280 @@
 // Game content shared by the server (for validation and scoring) and the browser (for display).
+// Source: the "Bed 14: EHR Game Briefs" set (00-overview to 15-patients-and-advocate).
 (function (root) {
   'use strict';
 
-  const ROLE_ORDER = ['physician', 'nurse', 'cfo', 'advocate', 'safety', 'it'];
+  // ---------- stakeholders ----------
 
-  // `side` is which EHR simulation a role sits in: clinicians use it, everyone else shadows one.
-  const ROLES = {
-    physician: {
-      icon: '🧑‍⚕️', name: 'PHYSICIAN', plural: 'Physicians', short: 'Physician', side: 'physician',
-      priority: 'Give patients good care without spending your entire life documenting it.',
-      detail: 'You currently spend enormous amounts of time clicking through the EHR and writing notes.',
-      want: 'less documentation and fewer useless alerts.',
-      fear: 'mistakes made by the system that you are ultimately responsible for.',
-      brief: {
-        general: 'You want your evenings back. You will be held responsible for errors in anything you sign, including text an AI drafted.',
-        a: 'Far fewer interruptions. You still chart until 9pm.',
-        b: 'Cuts your documentation time by about <b>40%</b>. Hospital policy: physicians remain responsible for every AI-generated error.',
-        c: 'The biggest time savings on offer. Also the most AI-written text you must verify and sign.',
-        d: 'Little changes for you, and you still sit through 8 hours of training.',
-      },
-    },
-    nurse: {
-      icon: '👩‍⚕️', name: 'NURSE', plural: 'Nurses', short: 'Nurse', side: 'nurse',
-      priority: 'Keep patients safe while managing an already overwhelming workload.',
-      want: 'fewer repetitive tasks and useful alerts.',
-      fear: '"automation" that actually creates more work for nurses.',
-      brief: {
-        general: 'Every "time-saver" built for physicians has historically landed on nursing as extra work.',
-        a: 'Critical labs finally reach you directly. Small, but real.',
-        b: 'Nothing in it for nursing. Physicians get relief; you do not.',
-        c: 'Every AI-generated high-risk alert must be manually verified by a nurse. Estimated result: <b>+45 minutes of nursing work per shift.</b>',
-        d: 'Built for you: chart once, scanners that work. But it takes 12 months and go-live will be rough.',
-      },
-    },
-    cfo: {
-      icon: '💰', name: 'HOSPITAL CFO', plural: 'CFOs', short: 'CFO', side: 'physician',
-      priority: 'Keep the hospital financially sustainable.',
-      want: 'innovations that save money or generate revenue.',
-      fear: 'paying millions for something whose financial benefits go to patients or insurers instead of the hospital.',
-      brief: {
-        general: 'Capital budget available this year: <b>$2.5 million.</b> Operating margin: 1.2%. Anything over budget means cutting something else, unless you change how it is paid for.',
-        a: '<b>$0.6M.</b> Fits the budget. Fewer medication errors trims malpractice exposure.',
-        b: '<b>$2.4M.</b> Barely fits. Pays off only if physicians use the saved time to see more patients.',
-        c: '<b>$5.0M</b>, double your budget. Expected to cut avoidable hospitalizations, saving insurers about <b>$8 million.</b> Penn General receives almost none of those savings.',
-        d: '<b>$3.2M.</b> Over budget. The return is lower nurse turnover: real, slow, and hard to show on a spreadsheet.',
-      },
-    },
-    advocate: {
-      icon: '🙋', name: 'PATIENT ADVOCATE', plural: 'Patient Advocates', short: 'Patient Advocate', side: 'nurse',
-      priority: 'Make care safe, understandable, accessible, and patient-centered.',
-      want: 'shorter waits, transparency, and doctors who actually look at patients instead of screens.',
-      fear: "patients being harmed by systems they don't understand.",
-      brief: {
-        general: 'Patients want shorter waits, a clinician who looks at them, and a record they can understand.',
-        a: 'Directly prevents the kind of error Maria nearly suffered. Does nothing for waits.',
-        b: 'Doctors look at patients instead of screens. But patients cannot see which parts of their note an AI wrote.',
-        c: 'Shorter waits and more face time. Algorithms patients do not understand now shape their care.',
-        d: 'The only package with a plain-language patient portal.',
-      },
-    },
-    safety: {
-      icon: '⚖️', name: 'SAFETY & ETHICS OFFICER', plural: 'Safety Officers', short: 'Safety', side: 'nurse',
-      priority: 'Make sure new systems are safe and actually supported by evidence.',
-      want: 'testing before widespread deployment.',
-      fear: 'the hospital deploying something because it sounds exciting without knowing whether it works.',
-      brief: {
-        general: "You want evidence that it works here, on Penn General's patients, not in the vendor's demo.",
-        a: 'Rule-based and well studied. The lowest-risk option.',
-        b: 'AI-drafted notes can contain confident errors. Tested by the vendor only.',
-        c: "Performed well in the vendor's testing. It has <b>never been tested on Penn General's patients.</b> Leadership wants it live quickly.",
-        d: 'No AI. But big workflow changes cause errors during go-live.',
-      },
-    },
-    it: {
-      icon: '💻', name: 'HEALTH IT LEAD', plural: 'IT Leads', short: 'IT', side: 'physician',
-      priority: 'Make technology actually work inside the hospital.',
-      want: 'systems that integrate with existing workflows.',
-      fear: "leadership buying another shiny technology that doesn't integrate with the EHR.",
-      brief: {
-        general: 'You have a team of six and a long backlog. Whatever the hospital picks, your team installs it.',
-        a: 'Configuration only. Two months with existing staff.',
-        b: 'Vendor-hosted, moderate integration, and new microphones in 200 exam rooms.',
-        c: 'Works beautifully in the demo. Integration with your existing EHR will take <b>9 months</b> and require several major workflow changes.',
-        d: 'Twelve months. Replace every scanner and rebuild the nursing flowsheets. The riskiest go-live of the four.',
-      },
-    },
+  // Seven stakeholder groups. Group 5 (vendors) pitches but does not vote.
+  const GROUPS = {
+    1: { name: 'Executive leadership and board', short: 'Executive', icon: '🏛️' },
+    2: { name: 'Finance and revenue cycle', short: 'Finance', icon: '💰' },
+    3: { name: 'Clinical end users', short: 'Clinical', icon: '🩺' },
+    4: { name: 'IT and informatics', short: 'IT', icon: '💻' },
+    5: { name: 'Vendors', short: 'Vendor', icon: '🤝' },
+    6: { name: 'Compliance, legal and regulators', short: 'Compliance', icon: '⚖️' },
+    7: { name: 'Patients and patient advocate', short: 'Patients', icon: '🙋' },
   };
+  const VOTING_GROUPS = [1, 2, 3, 4, 6, 7];
+
+  // Roles a player can pick. Physicians and nurses play phases 1 and 2 and belong to group 3.
+  // `sim` is the Phase 1 chart a role works (physician/nurse) or shadows; vendors prepare their pitch instead.
+  const ROLE_ORDER = ['physician', 'nurse', 'clinical', 'exec', 'finance', 'it', 'compliance', 'advocate', 'vendor'];
+  const ROLES = {
+    physician: { icon: '🧑‍⚕️', name: 'PHYSICIAN TEAM', short: 'Physician', plural: 'Physicians', group: 3, sim: 'physician', who: 'Attending, surgeon and resident for bed 14' },
+    nurse: { icon: '👩‍⚕️', name: 'NURSE TEAM', short: 'Nurse', plural: 'Nurses', group: 3, sim: 'nurse', who: 'Day-shift nursing team on 6 West' },
+    clinical: { icon: '🩺', name: 'CLINICAL LEADERSHIP', short: 'CMO/CNO', plural: 'Clinical leaders', group: 3, sim: 'nurse', who: 'CMO, CNO, physician champions, pharmacists' },
+    exec: { icon: '🏛️', name: 'EXECUTIVE LEADERSHIP & BOARD', short: 'CEO/Board', plural: 'Executives', group: 1, sim: 'physician', who: 'CEO, COO, board members' },
+    finance: { icon: '💰', name: 'FINANCE & REVENUE CYCLE', short: 'CFO', plural: 'Finance', group: 2, sim: 'physician', who: 'CFO, billing and revenue-cycle leads' },
+    it: { icon: '💻', name: 'IT & INFORMATICS', short: 'IT', plural: 'IT', group: 4, sim: 'physician', who: 'CIO, CMIO, CNIO, technical teams' },
+    compliance: { icon: '⚖️', name: 'COMPLIANCE, LEGAL & REGULATORS', short: 'Compliance', plural: 'Compliance', group: 6, sim: 'nurse', who: 'Privacy and security officers, legal counsel' },
+    advocate: { icon: '🙋', name: 'PATIENT ADVOCATE', short: 'Advocate', plural: 'Advocates', group: 7, sim: 'nurse', who: 'Speaks for the Whitfield family' },
+    vendor: { icon: '🤝', name: 'VENDORS', short: 'Vendor', plural: 'Vendors', group: 5, sim: null, who: 'New vendor, outgoing vendor, implementation consultants' },
+  };
+
+  // Physicians and nurses also belong to group 3; from Phase 3 on they see the clinical brief too.
+  const GROUP_BRIEF = { physician: 'clinical', nurse: 'clinical' };
+
+  // ---------- problems and packages ----------
 
   const PROBLEMS = [
-    { id: 'alerts', cat: 'Safety', label: 'Alert overload', desc: 'Constant low-value alerts; critical ones look just like trivial ones.' },
-    { id: 'allergy', cat: 'Safety', label: 'Allergies are buried', desc: 'Allergy information is not visible where drugs are ordered or given.' },
-    { id: 'labs', cat: 'Safety', label: 'Critical results not highlighted', desc: 'Dangerous lab values sit unmarked in dense tables.' },
-    { id: 'scanner', cat: 'Safety', label: 'Scanning failures and overrides', desc: 'Barcode scans fail, so staff routinely override the safety check.' },
-    { id: 'clutter', cat: 'Usability', label: 'Cluttered screens', desc: 'Far too much irrelevant information on every screen.' },
-    { id: 'billing', cat: 'Usability', label: 'Built for billing', desc: 'Billing and coding content crowds out clinical content.' },
-    { id: 'search', cat: 'Efficiency', label: "Can't find anything", desc: 'No fast way to find one fact or one result.' },
-    { id: 'clicks', cat: 'Efficiency', label: 'Too many clicks', desc: 'Every simple action needs several steps and confirmations.' },
-    { id: 'doctime', cat: 'Efficiency', label: 'Documentation takes over', desc: 'More time is spent charting than with patients.' },
-    { id: 'bloat', cat: 'Documentation', label: 'Note bloat and copy-forward', desc: 'Notes are copied visit to visit; key facts get lost.' },
-    { id: 'dupes', cat: 'Documentation', label: 'Duplicate and outdated lists', desc: 'Problem and medication lists contain duplicates and stale entries.' },
-    { id: 'double', cat: 'Documentation', label: 'Double documentation', desc: 'The same information must be charted in several places.' },
-    { id: 'handoff', cat: 'Communication', label: 'Nurse–physician communication gaps', desc: 'No reliable way to reach each other or know a result was seen.' },
-    { id: 'inbox', cat: 'Workflow', label: 'Message overload', desc: 'Dozens of unread inbox and patient-portal messages.' },
-    { id: 'patientview', cat: 'Communication', label: 'Patients left out', desc: 'Patients cannot see or understand their own record.' },
+    { id: 1, label: 'Too many clicks', desc: 'Every clue in bed 14 sat several screens deep.' },
+    { id: 2, label: 'Alert fatigue', desc: 'Alerts every few seconds; five acknowledged in one line at 11:06.' },
+    { id: 3, label: 'Note bloat', desc: 'An 11-page note with 2 pages of new information.' },
+    { id: 4, label: 'Copy-paste errors', desc: 'Progress notes copied forward a 3-day-old tacrolimus level.' },
+    { id: 5, label: 'Hard-to-find information', desc: 'The tremor sat in a night nursing note; the artery flow in a report body.' },
+    { id: 6, label: 'Medication reconciliation', desc: 'Three home medication lists; the EHR imported the oldest.' },
+    { id: 7, label: 'Poor interoperability', desc: 'Outside records arrived as an 84-page unsearchable fax.' },
+    { id: 8, label: 'Duplicate entry', desc: 'Vitals and weight typed into three places.' },
+    { id: 9, label: 'Documentation burden', desc: 'Nine required nursing assessments per shift.' },
+    { id: 10, label: 'Inbox overload', desc: 'Pages, portal messages and calls nobody had time to answer.' },
+    { id: 11, label: 'Poor handoffs', desc: '"Surgery might change the tacrolimus." No order followed.' },
+    { id: 12, label: 'Buried results', desc: 'The donor culture lived only in the transplant module.' },
+    { id: 13, label: 'Poor interface design', desc: 'Critical items looked exactly like trivial ones.' },
+    { id: 14, label: 'Discharge fragmentation', desc: 'Therapy said rehab; the plan still said home October 2.' },
+    { id: 15, label: 'Weak decision support and AI', desc: 'No alert when fluconazole met tacrolimus; EWS 5 never escalated.' },
   ];
 
-  const PACKAGE_ORDER = ['a', 'b', 'c', 'd'];
+  const BUDGET = 12; // $M approved capital
+  const PACKAGE_ORDER = ['A', 'B', 'C', 'D', 'E'];
   const PACKAGES = {
-    a: {
-      letter: 'A', icon: '🩹', name: 'SAFETY PATCH', tagline: 'Fix the alerts. Touch nothing else.',
-      cost: 0.6, months: 2, training: '1 hour, all clinical staff', change: 'Low',
-      features: [
-        'Tiered alerts: only high-severity alerts interrupt',
-        'Allergy banner on every ordering and medication screen',
-        'Critical lab values flagged and sent to nurse and physician',
-      ],
-      fixes: ['alerts', 'allergy', 'labs'],
-      headline: 'Safer. Still slow.',
-      maria: 'One red alert stopped the amoxicillin order. Nobody had to hunt for it.',
-      outcome: {
-        physician: 'Interruptions fell by 80%. You still spend two hours charting for every hour with patients.',
-        nurse: 'Critical labs now reach you directly. Charting and scanning are exactly as painful as before.',
-        cfo: 'On budget. Two serious medication errors avoided. No change in revenue.',
-        advocate: 'Allergy conflicts get caught. Waits and screen-staring are unchanged.',
-        safety: 'A measurable drop in missed critical alerts, from the cheapest and best-evidenced option.',
-        it: 'Delivered in two months. Your team went back to the backlog.',
-      },
-    },
-    b: {
-      letter: 'B', icon: '🎙️', name: 'AMBIENT SCRIBE', tagline: 'AI that listens and writes the note.',
-      cost: 2.4, months: 4, training: '4 hours, physicians', change: 'Medium',
-      features: [
-        'AI listens to each visit and drafts the note',
-        'A fresh note every visit instead of copy-forward',
-        'AI drafts replies to patient messages',
-        'Billing codes suggested automatically',
-      ],
-      fixes: ['doctime', 'bloat', 'inbox', 'billing'],
-      ai: true,
-      headline: 'Doctors look up from the screen.',
-      maria: 'Her doctor looked at her for the whole visit. The allergy alert was dismissed again; a pharmacist caught the order.',
-      outcome: {
-        physician: 'Documentation time is down about 40%. You sign notes you did not write, and you answer for them.',
-        nurse: 'Nothing changed for nursing. Resentment did.',
-        cfo: 'Physicians see slightly more patients. The return depends on that continuing.',
-        advocate: 'Doctors make eye contact again. Patients notice.',
-        safety: 'Alert fatigue is untouched. The allergy alert still looks like the flu-shot reminder.',
-        it: 'Live in four months. Microphone tickets are the new normal.',
-      },
-    },
-    c: {
-      letter: 'C', icon: '🤖', name: 'PENNAI COPILOT', tagline: 'A full AI layer across the whole EHR.',
-      cost: 5.0, months: 9, training: '12 hours, all clinical staff', change: 'High',
-      features: [
-        'Everything in Ambient Scribe',
-        'AI summary of years of patient history',
-        'Ask the chart a question in plain language',
-        'AI-prioritized alerts and highlighted critical results',
-        'Cleaned-up problem and medication lists',
-      ],
-      fixes: ['doctime', 'bloat', 'inbox', 'billing', 'clutter', 'search', 'alerts', 'dupes', 'labs'],
-      ai: true,
-      headline: 'Transformed, with new risks to watch.',
-      maria: 'Her alerts were prioritized correctly. Her AI summary said "No known drug allergies."',
-      outcome: {
-        physician: 'The chart is finally readable and notes write themselves. In month two, an AI summary omitted a penicillin allergy.',
-        nurse: 'Verifying AI-generated alerts adds about 45 minutes to every shift.',
-        cfo: 'Avoidable hospitalizations fell, saving insurers about $8M. Penn General saw almost none of it.',
-        advocate: 'Shorter waits and more face time. Patients are asking who, or what, wrote their notes.',
-        safety: "It went live without testing on Penn General's patients. The omitted allergy was caught by a nurse's manual check.",
-        it: 'Nine months of integration work. Everything else waited.',
-      },
-      // Replacement lines when a negotiated term changes how the story went.
-      outcomeWith: {
-        pilot: {
-          physician: 'The chart is finally readable and notes write themselves. On the pilot unit, an AI summary omitted a penicillin allergy; it was fixed before rollout, and you still double-check every summary.',
-          safety: 'The pilot unit caught an AI summary that omitted a penicillin allergy. The vendor had to fix it before the hospital-wide rollout.',
-        },
-      },
-    },
-    d: {
-      letter: 'D', icon: '🛠️', name: 'WORKFLOW REBUILD', tagline: 'Rebuild nursing and communication. No AI.',
-      cost: 3.2, months: 12, training: '8 hours, all staff', change: 'High',
-      features: [
-        'Chart-once nursing flowsheets',
-        'New scanners and a one-step medication workflow',
-        'Fewer confirmation clicks everywhere',
-        'Nurse–physician messaging with critical-result escalation',
-        'Allergy check at the bedside',
-        'Plain-language patient portal',
-      ],
-      fixes: ['double', 'scanner', 'clicks', 'handoff', 'allergy', 'patientview'],
-      headline: 'The basics finally work.',
-      maria: 'Her nurse saw the allergy at the bedside before giving the first dose.',
-      outcome: {
-        physician: 'Fewer clicks, and you can actually reach the nurse. Notes and alerts are as bad as ever.',
-        nurse: 'Chart once. Scanners work. Turnover on your unit dropped.',
-        cfo: 'Savings from nurse retention arrive slowly and never show up as revenue.',
-        advocate: 'Patients can read their own record in plain language.',
-        safety: 'Go-live month saw a spike in near-misses. It settled.',
-        it: 'A hard twelve months and the riskiest go-live you have run.',
-      },
-    },
-    keep: {
-      letter: '—', icon: '🚫', name: 'KEEP THE CURRENT EHR', tagline: 'No deal. Change nothing.',
-      cost: 0, months: 0, training: 'None', change: 'None',
-      features: [],
-      fixes: [],
-      headline: 'Nothing changed.',
-      maria: 'A pharmacist caught the amoxicillin order. This time.',
-      outcome: {
-        physician: 'Still 4,000 clicks a day.',
-        nurse: 'Three more nurses left your unit.',
-        cfo: 'You spent nothing. Burnout and turnover do not appear on this year’s budget line.',
-        advocate: 'Patients still watch their doctor type.',
-        safety: 'The next missed alert is a matter of time.',
-        it: 'No project. The backlog thanks you.',
-      },
-    },
+    A: { name: 'AI Clinical Assistant', icon: '🧠', tech: 'Generative AI: ambient scribe, chart summaries, inbox AI, AI search', cost: 5, fixes: [1, 3, 4, 5, 9, 10],
+      pitch: 'Clinicians treat patients instead of searching charts and writing notes.',
+      replay: 'A one-screen summary shows the 05:30 tremor, both consult warnings and the 84-page fax in plain language.' },
+    B: { name: 'Automation and Workflow', icon: '⚙️', tech: 'Robotic process automation and workflow engines', cost: 4, fixes: [1, 8, 9, 10, 14],
+      pitch: 'Stop paying skilled clinicians to do repetitive admin work.',
+      replay: 'Vitals and weight are entered once. The discharge workflow flags the therapy note, and the October 2 target is pulled.' },
+    C: { name: 'Connected Hospital', icon: '🔗', tech: 'FHIR APIs, health information exchange, medication reconciliation', cost: 8, fixes: [5, 6, 7, 8, 11, 14],
+      pitch: 'Every member of the care team sees the same information, wherever the patient was treated.',
+      replay: 'Outside records arrive searchable. The donor culture and the old resistant E. coli appear in the main chart, and the medication lists reconcile.' },
+    D: { name: 'Intelligent Safety System', icon: '🛡️', tech: 'Predictive AI and clinical decision support', cost: 7, fixes: [2, 6, 11, 12, 15],
+      pitch: 'Instead of 100 generic alerts, 5 high-priority ones that reach the right person.',
+      replay: 'An interaction alert fires when fluconazole is ordered, a score of 5 pages a physician at 12:00, and tacrolimus is held.' },
+    E: { name: 'Smart Hospital and Robotics', icon: '🤖', tech: 'Robots, connected devices, real-time location tracking', cost: 12, fixes: [8, 11, 12, 14],
+      pitch: "The EHR doesn't stop at the screen; the physical hospital feeds the record.",
+      replay: 'The smart bed flags the 1.3 kg weight gain, and connected monitors feed vitals straight to the chart.' },
   };
 
-  // Terms the hospital can attach to a package. `cost` is added in $M, `months` to the timeline,
-  // `discount` is the share of the bill someone else pays.
-  const MODS = [
-    { id: 'pilot', label: 'Pilot on one unit first', desc: 'Test locally before hospital-wide rollout.', months: 3, applies: ['a', 'b', 'c', 'd'], role: 'safety', effect: 'You had evidence from your own patients before the hospital-wide rollout.' },
-    { id: 'phased', label: 'Pay in phases over 3 years', desc: 'Spread the cost across three budgets.', phased: true, applies: ['a', 'b', 'c', 'd'], role: 'cfo', effect: 'Phased payments spread the bill across three budget years.' },
-    { id: 'payer', label: 'Ask insurers to co-fund 20%', desc: 'They capture the savings; ask them to share the cost.', discount: 0.2, months: 2, applies: ['b', 'c', 'd'], role: 'cfo', effect: 'Two insurers agreed to co-fund 20%. Negotiating it took two extra months.' },
-    { id: 'backfill', label: 'Paid training time and nurse backfill', desc: 'Protected time to learn it, with cover on the unit.', cost: 0.4, applies: ['a', 'b', 'c', 'd'], role: 'nurse', effect: 'Training happened on paid, protected time with cover on the unit.' },
-    { id: 'liability', label: 'Vendor shares liability for AI errors', desc: 'Physicians are not solely responsible for AI mistakes.', cost: 0.3, applies: ['b', 'c'], role: 'physician', effect: 'The vendor now shares responsibility for AI-generated errors.' },
-    { id: 'label', label: 'Label AI-written content for patients', desc: 'Patients can see which parts of a note an AI drafted.', applies: ['b', 'c'], role: 'advocate', effect: 'AI-written text is labeled in every note a patient can see.' },
-    { id: 'integration', label: 'Integration-testing gate before go-live', desc: 'No go-live until it works with the existing EHR.', months: 2, applies: ['a', 'b', 'c', 'd'], role: 'it', effect: 'The integration-testing gate found the worst bugs before go-live.' },
+  // A choice is one package or a pair, written as sorted letters: "A", "A+D".
+  const choiceLetters = (key) => String(key || '').split('+').filter((l) => PACKAGES[l]);
+  const normalizeChoice = (letters) => {
+    const set = [...new Set(letters)].filter((l) => PACKAGES[l]).sort();
+    return set.length >= 1 && set.length <= 2 ? set.join('+') : null;
+  };
+  const choiceCost = (key) => choiceLetters(key).reduce((sum, l) => sum + PACKAGES[l].cost, 0);
+  const choiceFixes = (key) => [...new Set(choiceLetters(key).flatMap((l) => PACKAGES[l].fixes))].sort((a, b) => a - b);
+
+  // The combinations table from the Phase 5 brief.
+  const COMBOS = ['A+D', 'B+D', 'B+C', 'A+B', 'C', 'E'];
+
+  const FINANCE_ASKS = [
+    'Proof: results from at least one comparable hospital.',
+    'Payment tied to milestones, not paid upfront.',
+    'A plan to keep claims flowing during go-live.',
+    'Clear yearly costs after year one, such as licenses and support.',
   ];
 
-  const BUDGET = 2.5; // $M of capital the CFO has this year
+  // ---------- Phase 2: did you spot it? ----------
 
-  const CONTENT = { ROLE_ORDER, ROLES, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODS, BUDGET };
+  // `correct` is null for "did you see it?" questions; the app compares against what the player opened.
+  const QUIZ_SECONDS = 18; // per question; 8 questions plus 36 s of ranking make the brief's 3 minutes
+  const QUIZ_ANSWER_SECONDS = 12; // then the answer is revealed
+  const QUIZ = [
+    { id: 'tremor', q: 'Did you see the hand tremor before 09:00?', options: ['Yes', 'No'], correct: null, answer: 'It was in a night nursing note at 05:30.', problems: [5, 11], clue: 'tremor' },
+    { id: 'neph', q: 'Was the kidney team\'s "hold tacrolimus above 12" advice in the surgical plan?', options: ['Yes', 'No'], correct: 1, answer: 'No. It sat in a separate consult tab.', problems: [11, 13], clue: 'neph' },
+    { id: 'ddi', q: 'Did any alert fire when fluconazole was added to tacrolimus?', options: ['Yes', 'No'], correct: 1, answer: 'No. The order set skipped the interaction check.', problems: [15], clue: 'ddi' },
+    { id: 'ack', q: 'How many alerts were acknowledged in one line at 11:06?', options: ['One', 'Three', 'Five', 'Twelve'], correct: 2, answer: 'Five, in a single progress-note addendum.', problems: [2], clue: 'ack1106' },
+    { id: 'donor', q: "Does today's antibiotic cover the donor's bacteria?", options: ['Yes', 'No', 'There is no donor result'], correct: 1, answer: 'No. The result was only in the transplant module.', problems: [7, 12], clue: 'donor' },
+    { id: 'medlist', q: 'Which home medication list did the EHR import?', options: ['The outdated March list', 'The September pharmacy fill list', "The daughter's handwritten list"], correct: 0, answer: 'The outdated March list.', problems: [6], clue: 'medlists' },
+    { id: 'vitals', q: 'How many places were vitals and weight typed into?', options: ['One', 'Two', 'Three', 'Four'], correct: 2, answer: 'Three.', problems: [8], clue: 'vitals3' },
+    { id: 'ews', q: 'Was the early warning score of 5 escalated?', options: ['Yes', 'No'], correct: 1, answer: 'No.', problems: [2, 15], clue: 'ews' },
+  ];
+  const RANK_PICKS = 5;
+
+  // ---------- Phase 6: the replay ----------
+
+  const HAPPY_ENDING = [
+    'The tacrolimus is held.',
+    'The antibiotic is switched.',
+    'Potassium is treated.',
+    'Mr. Whitfield goes to rehab instead of home.',
+    'His daughter hears about the pathology in a family meeting.',
+    'The new liver keeps working.',
+  ];
+
+  // ---------- Phase 1: the bed 14 simulation ----------
+
+  const SIM = (() => {
+    const LABS_AT = 165; // 2:45 real time, 13:02 on the ward clock
+    const DOWN_AT = 180; // 3:00: screens freeze, orders won't sign, downtime mode
+    const OVERRIDE_AT = 60; // 1:00: override buttons appear
+    const FAX_AT = 125; // the 84-page fax lands as one image
+
+    // The ward clock: 4 real minutes cover 12:45 to 13:05, with 13:02 at 2:45.
+    const KEYS = [[0, 0], [LABS_AT, 17], [DOWN_AT, 18], [240, 20]];
+    const clockAt = (sec) => {
+      const s = Math.max(0, Math.min(240, sec));
+      let i = 1;
+      while (i < KEYS.length - 1 && KEYS[i][0] < s) i++;
+      const [s0, m0] = KEYS[i - 1];
+      const [s1, m1] = KEYS[i];
+      const m = 12 * 60 + 45 + Math.floor(m0 + ((s - s0) / (s1 - s0)) * (m1 - m0));
+      return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    };
+
+    // One alert every 15 s, then every 5 s, then faster than anyone can read.
+    const SLOTS = [];
+    for (let t = 5; t < 60; t += 15) SLOTS.push(t);
+    for (let t = 60; t < 120; t += 5) SLOTS.push(t);
+    for (let t = 120; t < LABS_AT - 0.5; t += 0.9) SLOTS.push(Math.round(t * 10) / 10);
+
+    const LAB_ALERTS = [
+      { id: 'lab_tac', t: LABS_AT, title: 'CRITICAL: tacrolimus 19.4 ng/mL', sub: 'Target 8–12. Redrawn 10:40.', go: 'results', crit: true },
+      { id: 'lab_k', t: LABS_AT, title: 'CRITICAL: potassium 6.2 mmol/L', sub: 'Redrawn 10:40. Not hemolyzed.', go: 'results', crit: true },
+      { id: 'lab_cr', t: LABS_AT, title: 'CRITICAL: creatinine 2.4 mg/dL', sub: 'Was 1.6 yesterday. Redrawn 10:40.', go: 'results', crit: true },
+    ];
+    const build = (fillers, keys) => {
+      const byT = Object.fromEntries(keys.map((k) => [k.t, k]));
+      const list = SLOTS.map((t, i) => {
+        if (byT[t]) return byT[t];
+        const [title, sub] = fillers[i % fillers.length];
+        return { id: `f${i}`, t, title: i < fillers.length ? title : `${title} (reminder)`, sub };
+      });
+      return [...list, ...LAB_ALERTS];
+    };
+
+    const physician = {
+      task: '<b>Bed 14 is getting worse.</b> Find out why, log what you find and where, and record your six decisions.',
+      tabs: [['summary', 'Summary'], ['notes', 'Notes'], ['results', 'Results'], ['mar', 'Orders & MAR'], ['medrec', 'Med Rec'], ['imaging', 'Imaging'], ['media', 'Media'], ['transplant', 'Transplant Module']],
+      alerts: build([
+        ['Advance care planning not documented', 'Required for patients 60 and older'],
+        ['Duplicate order: CBC with differential', 'Ordered by 2 providers'],
+        ['Sepsis model score: 0.41', 'Model not validated for transplant patients'],
+        ['Opioid prescribing: PDMP check required', 'oxycodone 5 mg PO q4h PRN'],
+        ['Co-signature required', '3 verbal orders from 09/28'],
+        ['Pneumococcal vaccine status unknown', 'Health maintenance topic'],
+        ['Foley catheter day 6', 'Is it still indicated? (CAUTI bundle)'],
+        ['Unsigned note', 'Progress note 09/28 07:35'],
+        ['Antibiotic time-out due', 'ceftriaxone day 1: confirm indication'],
+        ['Glucose 312 mg/dL at 12:30', 'Sliding-scale insulin dose due'],
+        ['Discharge med rec not started', 'Expected discharge 10/02'],
+        ['Coding query', 'Clarify "acute" vs "chronic" kidney disease'],
+        ['Telemetry order: none active', 'Consider if indicated'],
+        ['Home medication list: 2 items unverified', 'Verify with patient or pharmacy'],
+        ['Your password expires in 3 days', 'Change it in Tools → Security'],
+        ['Wrong-patient check', 'You have 2 charts open'],
+      ], [{ id: 'aki', t: 50, title: 'Creatinine up ≥ 0.3 mg/dL in 48 h', sub: '1.2 → 1.6 mg/dL. Possible acute kidney injury.', go: 'results', crit: true }]),
+      pages: [
+        { id: 'pharm', t: 8, from: 'Transplant pharmacy', text: "The insurer's prior authorization for tacrolimus has been pending since 09/28. Discharge prescriptions may be delayed.", replies: ['Thanks, noted.', 'Please escalate to case management.'] },
+        { id: 'emily1', t: 22, from: 'Emily Whitfield (daughter) · portal', text: "Dad's hands are shaking and he keeps asking what day it is. Is that the new medicines? I've called twice about the fever and nobody called back. Is Thursday still the plan?", replies: ["Thank you. We're looking into it now, and I'll call you today.", 'A tremor is a common side effect. Nothing to worry about.', 'Yes, Thursday is still the plan.'] },
+        { id: 'rad', t: 40, from: 'Radiology reading room', text: 'Please call back about the bed 14 liver Doppler from 09/28. Ext 4410.', replies: ['Call back now.', 'Later.'],
+          then: { on: 0, after: 8, from: 'Dr. Lin, Radiology', text: 'The impression on that Doppler auto-filled from our normal template. Please read the findings: the hepatic artery flow has dropped a lot since 09/24.' } },
+        { id: 'beds', t: 72, from: 'Bed management', text: 'Bed 14 is flagged for discharge 10/02. Please start discharge med rec by 15:00.', replies: ['Discharge is on hold.', 'Will do.'] },
+        { id: 'emily2', t: 95, from: 'Emily Whitfield (daughter) · portal', text: 'The surgeon said they would look at the old liver. Is the cancer gone now?', replies: ["Let's sit down together in a family meeting today.", 'Yes, it is all gone.', "I'll check and get back to you."] },
+        { id: 'him', t: FAX_AT, from: 'Health information management', text: "84-page fax from St. Mary's Medical Center received. Scanned to Media as one image.", replies: ['Acknowledged.'] },
+        { id: 'pt', t: 150, from: 'Physical therapy', text: 'PT and OT recommend inpatient rehab, not home. See the therapy note from 09/28.', replies: ['Thanks. Discharge is on hold.', 'Noted.'] },
+        { id: 'rn', t: 195, from: 'Priya Shah, RN · 6 West', text: 'The EHR is down on our side too. What do you want for bed 14? I need verbal orders.', replies: ['Coming to the bedside with verbal orders.', 'Wait until the system is back.'] },
+      ],
+      decisions: [
+        { id: 'tac', q: "Tonight's tacrolimus", options: [['continue', 'Continue'], ['reduce', 'Reduce'], ['hold', 'Hold']], best: ['hold'] },
+        { id: 'abx', q: 'The antibiotic (ceftriaxone)', options: [['keep', 'Keep it'], ['switch', 'Switch it']], best: ['switch'] },
+        { id: 'anticoag', q: 'The blood thinner (apixaban)', options: [['restart', 'Restart'], ['hold', 'Keep holding']], best: ['hold'] },
+        { id: 'imaging', q: 'Imaging today', options: [['none', 'None'], ['us', 'Repeat Doppler'], ['cta', 'CT angiography']], best: ['us', 'cta'] },
+        { id: 'discharge', q: 'October 2 discharge', options: [['stands', 'Stands'], ['cancel', 'Cancel']], best: ['cancel'] },
+        { id: 'care', q: 'Level of care', options: [['floor', 'Stay on the floor'], ['higher', 'Higher level of care']], best: ['higher'] },
+      ],
+    };
+
+    const nurse = {
+      task: '<b>You have four patients, and bed 14 is getting worse.</b> Chart, scan and answer alerts for bed 14. Log what you find and where.',
+      tabs: [['summary', 'Worklist'], ['mar', 'MAR'], ['flow', 'Flowsheets'], ['assess', 'Assessments'], ['notes', 'Notes'], ['results', 'Results'], ['orders', 'Orders'], ['medrec', 'Med Rec'], ['media', 'Media'], ['transplant', 'Transplant Module']],
+      alerts: build([
+        ['Fall risk reassessment due', 'Required every shift'],
+        ['Pain reassessment overdue', 'Last charted: 4 h 12 min ago'],
+        ['Intake & output not charted', 'Current shift'],
+        ['Skin assessment due', 'Braden score required'],
+        ['Patient education not documented', 'Topic: new medications'],
+        ['Bed 12: call light', 'Requesting pain medicine'],
+        ['Scanner battery low', 'Dock device at end of shift'],
+        ['Isolation cart needs restocking', 'Protective isolation, bed 14'],
+        ['IV site assessment due', 'Required every 4 hours'],
+        ['Bed 16: call light', 'Needs help to the bathroom'],
+        ['Care plan needs update', 'Last updated: 26 hours ago'],
+        ['Hourly rounding not documented', 'Last charted: 12:00'],
+        ['Bed 11: dressing change due', 'Ordered daily'],
+        ['Discharge planning screen due', 'Target discharge 10/02'],
+        ['Duplicate task: vital signs', 'Appears on two worklists'],
+        ['Telemetry box battery low', 'Bed 14'],
+      ], [{ id: 'ews', t: 35, title: 'Early warning score: 5', sub: 'Notify provider per policy.', go: 'summary', crit: true }]),
+      pages: [
+        { id: 'charge', t: 6, from: 'Charge nurse', text: 'You also have beds 11, 12 and 16 today. Bed 12 is asking for pain medicine.', replies: ["I'll get to bed 12 after bed 14.", 'Can someone cover bed 12?'] },
+        { id: 'emily', t: 18, from: 'Emily Whitfield (daughter) · phone', text: "This is my third call today. Dad has a fever and he's confused. Is he still coming home Thursday? Nobody calls me back.", replies: ["I'm with him now. I'll ask the doctors to call you.", "He's fine, it's just a small fever.", 'Yes, Thursday is still the plan.'] },
+        { id: 'pharm', t: 40, from: 'Pharmacy', text: 'Glucose 312: insulin lispro 8 units due now.', replies: ['Will give.', 'Holding; will ask the team.'] },
+        { id: 'surg', t: 80, from: 'Transplant surgery · secure chat', text: 'Might change the tacrolimus later. Will put in an order.', replies: ['Please call me before the 21:00 dose.', 'OK.'] },
+        { id: 'diet', t: 105, from: 'Dietitian', text: 'Renal low-potassium diet started yesterday. Please encourage the low-K menu.', replies: ['OK.'] },
+        { id: 'him', t: FAX_AT, from: 'Health information management', text: "84-page fax from St. Mary's Medical Center received. Scanned to Media as one image.", replies: ['Acknowledged.'] },
+        { id: 'pt', t: 150, from: 'Physical therapy', text: 'PT and OT recommend inpatient rehab, not home. See the therapy note from 09/28.', replies: ['I will tell the team.', 'Noted.'] },
+        { id: 'down', t: 195, from: 'Charge nurse', text: "EHR is down. Use the paper downtime MAR. The physicians can't see orders either.", replies: ['Calling the team to the bedside now.', 'Waiting for the system.'] },
+      ],
+      assessments: ['Vital signs and EWS', 'Neuro check', 'Intake and output', 'Glucose check', 'Fall risk (Morse)', 'Skin (Braden)', 'Pain reassessment', 'Patient education', 'Care plan update'],
+      decisions: [
+        { id: 'call', q: 'Call a physician to the bedside now?', options: [['now', 'Yes, now'], ['page', 'Page and wait'], ['recheck', 'Recheck in 1 hour']], best: ['now'] },
+        { id: 'doses', q: 'The next doses', options: [['give', 'Give as ordered'], ['hold', 'Hold and ask first']], best: ['hold'] },
+        { id: 'cantwait', q: "Assessments that can't wait (pick any)", multi: true, options: [['vitals', 'Vital signs and EWS'], ['neuro', 'Neuro check'], ['io', 'Intake and output'], ['glucose', 'Glucose check'], ['fall', 'Fall risk'], ['skin', 'Skin'], ['pain', 'Pain'], ['edu', 'Education'], ['care', 'Care plan']], best: ['vitals', 'neuro', 'io', 'glucose'] },
+        { id: 'daughter', q: 'What do you tell the daughter?', options: [['meeting', 'The team will call and set up a family meeting'], ['discharge', 'Thursday is still the plan'], ['nothing', 'Nothing yet']], best: ['meeting'] },
+        { id: 'handoff', q: 'Your handoff to the night shift', text: true },
+      ],
+    };
+
+    // Things a careful team finds, and where. A clue counts as found when the player opens it.
+    const CLUES = [
+      { id: 'labs', label: 'Tacrolimus 19.4, potassium 6.2, creatinine 2.4', where: 'Results, after 13:02' },
+      { id: 'tremor', label: 'Hand tremor at 05:30', where: 'Notes → Nursing → night note' },
+      { id: 'neph', label: 'Nephrology: hold tacrolimus above 12', where: 'Notes → Consults' },
+      { id: 'idc', label: 'ID: fluconazole will raise tacrolimus', where: 'Notes → Consults' },
+      { id: 'ddi', label: 'No interaction check when fluconazole was ordered', where: 'MAR → fluconazole' },
+      { id: 'ack1106', label: 'Five alerts acknowledged in one line at 11:06', where: 'Notes → Progress → addendum' },
+      { id: 'stale', label: 'Progress notes copy forward a 3-day-old level', where: 'Notes → Progress' },
+      { id: 'donor', label: "Donor culture: ESBL Klebsiella, resistant to ceftriaxone", where: 'Transplant module' },
+      { id: 'us_body', label: 'Hepatic artery flow down in the ultrasound body', where: 'Imaging → full report' },
+      { id: 'ecg', label: 'Unreviewed ECG, QTc 492 ms', where: 'Media → ECG' },
+      { id: 'ews', label: 'Early warning score 5, no physician called', where: 'Summary / Worklist vitals' },
+      { id: 'potassium', label: 'Conflicting potassium orders', where: 'Orders: supplement, protocol, low-K diet' },
+      { id: 'medlists', label: 'Three home medication lists; the oldest was imported', where: 'Med Rec → other sources' },
+      { id: 'fax_ecoli', label: 'Old resistant E. coli in the outside records', where: 'Media → 84-page fax, page 52' },
+      { id: 'vitals3', label: 'Vitals and weight typed into three places', where: 'Flowsheets' },
+      { id: 'pathology', label: 'Second tumor on pathology, family not told', where: 'Results → pathology' },
+      { id: 'rehab', label: 'Therapy recommends rehab, not home', where: 'Notes → Other → therapy note' },
+    ];
+
+    return { LABS_AT, DOWN_AT, OVERRIDE_AT, FAX_AT, clockAt, CLUES, SIDES: { physician, nurse } };
+  })();
+
+  const CONTENT = {
+    GROUPS, VOTING_GROUPS, ROLE_ORDER, ROLES, GROUP_BRIEF, PROBLEMS, BUDGET, PACKAGE_ORDER, PACKAGES, COMBOS, FINANCE_ASKS,
+    QUIZ, QUIZ_SECONDS, QUIZ_ANSWER_SECONDS, RANK_PICKS, HAPPY_ENDING, SIM,
+    choiceLetters, normalizeChoice, choiceCost, choiceFixes,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = CONTENT;
   else root.CONTENT = CONTENT;
 })(typeof window !== 'undefined' ? window : globalThis);
