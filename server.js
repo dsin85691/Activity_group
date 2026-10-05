@@ -34,7 +34,7 @@ const isVoter = (player) => !!player && !!player.role && GROUPS[groupOf(player)]
 const STEPS = [
   { id: 'lobby', phase: 0 },
   { id: 'p1_intro', phase: 1, timer: 45 }, // read your task (not counted in the 4 minutes)
-  { id: 'p1_ehr', phase: 1, timer: 240, auto: true }, // 1 quiet minute, 3 minutes of alert storm, crash
+  { id: 'p1_ehr', phase: 1, timer: 60, auto: true }, // ten scripted steps, alerts from second 4, crash before the minute is up
   { id: 'p2_notes', phase: 2, timer: 180 }, // minutes 0-3: everyone logs what they hit or saw
   { id: 'p2_merge', phase: 2, timer: 300 }, // minutes 3-8: merge into one list, star what matters
   { id: 'p2_top3', phase: 2, timer: 120 }, // minutes 8-10: mark the must-fix problems, pick a spokesperson
@@ -279,7 +279,7 @@ const termOffered = (room, term) => !term.gate || room.shared.has(term.gate);
 // Turn a set of ballots into one deal: package, adopted terms, modules bought while the money lasts.
 function resolve(room, ballots) {
   const tally = tallyBallots(room, ballots);
-  if (!tally.present) return { pkg: 'keep', passed: false, byExec: false, empty: true, modules: [], dropped: [], terms: [], cost: dealCost({ pkg: 'keep' }), tally };
+  if (!tally.present) return { pkg: 'keep', passed: false, byExec: false, empty: true, modules: [], dropped: [], droppedTerms: [], terms: [], cost: dealCost({ pkg: 'keep' }), tally };
   const ranked = [...PACKAGE_IDS].sort((x, y) => tally.counts[y] - tally.counts[x] || PACKAGES[x].price - PACKAGES[y].price);
   let pkg = ranked[0];
   const passed = tally.counts[pkg] >= tally.need;
@@ -291,7 +291,18 @@ function resolve(room, ballots) {
   let terms = TERMS.filter(
     (t) => t.applies.includes(pkg) && termOffered(room, t) && tally.terms[t.id] >= tally.majority && (!t.needs || tally.termGroups[t.id].includes(t.needs))
   ).map((t) => t.id);
-  // Modules are bought in order of support until the cap is reached.
+  // Terms that cost money are bought in order of support, and only while the budget allows.
+  // Without the stretch (which finance must sign), an over-budget extra is simply not bought.
+  const termCost = (id) => TERMS.find((x) => x.id === id).cost || 0;
+  const droppedTerms = [];
+  const paid = terms.filter((id) => termCost(id) > 0).sort((x, y) => tally.terms[y] - tally.terms[x]);
+  terms = terms.filter((id) => termCost(id) <= 0);
+  for (const id of paid) {
+    const cost = dealCost({ pkg, modules: [], terms: [...terms, id] });
+    if (cost.total <= cost.cap + 1e-9) terms.push(id);
+    else droppedTerms.push(id);
+  }
+  // Modules are bought in order of support until the budget is reached.
   const modules = [];
   const dropped = [];
   if (pkg === 'd') {
@@ -309,7 +320,7 @@ function resolve(room, ballots) {
     const t = TERMS.find((x) => x.id === id);
     return !t.needsModule || trained;
   });
-  return { pkg, passed, byExec, empty: false, votes: tally.counts[pkg], modules, dropped, terms, cost: dealCost({ pkg, modules, terms }), tally };
+  return { pkg, passed, byExec, empty: false, votes: tally.counts[pkg], modules, dropped, droppedTerms, terms, cost: dealCost({ pkg, modules, terms }), tally };
 }
 
 function decide(room) {
@@ -330,6 +341,8 @@ function ehrSummary(room) {
       dismissed: rows.reduce((sum, e) => sum + e.n, 0),
       critSeen: crit.length,
       critMedianMs: crit.length ? crit[Math.floor(crit.length / 2)] : null,
+      stepsAvg: rows.length ? Math.round((rows.reduce((sum, e) => sum + (e.steps || 0), 0) / rows.length) * 10) / 10 : 0,
+      stepsBest: rows.reduce((best, e) => Math.max(best, e.steps || 0), 0),
       gaveSupp: rows.filter((e) => e.given.includes('supp')).length,
       gaveLact: rows.filter((e) => e.given.includes('lact')).length,
       insulin: rows.filter((e) => e.given.includes('insulin')).length,
@@ -490,12 +503,13 @@ function playerAction(room, player, body) {
   switch (body.type) {
     case 'ehr': {
       if (!open('ehr')) return;
-      const prev = room.ehr.get(player.id) || { n: 0, critMs: null, given: [], dose: null };
+      const prev = room.ehr.get(player.id) || { n: 0, critMs: null, given: [], dose: null, steps: 0 };
+      const steps = Math.max(prev.steps || 0, Math.min(10, parseInt(body.steps, 10) || 0));
       const n = Math.max(prev.n, Math.min(400, parseInt(body.n, 10) || 0));
       const critMs = typeof body.critMs === 'number' && body.critMs >= 0 ? Math.round(body.critMs) : prev.critMs;
       const given = body.given ? pickIds(body.given, DANGER_MEDS, DANGER_MEDS.length) : prev.given;
       const dose = DOSES.includes(body.dose) ? body.dose : prev.dose;
-      room.ehr.set(player.id, { n, critMs, given, dose });
+      room.ehr.set(player.id, { n, critMs, given, dose, steps });
       return;
     }
     case 'report': {

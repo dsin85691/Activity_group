@@ -969,3 +969,135 @@ h1.storm { color: var(--red); text-shadow: 0 0 30px rgba(255, 77, 94, 0.6); anim
 .after-alert-head { color: #c8102e; font-weight: 800; letter-spacing: 0.04em; display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .after-alert p { margin: 6px 0 10px; }
 @media (max-width: 900px) { .after-work { grid-template-columns: 1fr; } }
+
+/* projector controls for the replay */
+.simswitch { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 10px 0 4px; }
+.simswitch .eyebrow { margin: 0 4px 0 12px; }
+.simswitch .btn.primary { box-shadow: 0 0 14px rgba(45, 226, 197, 0.55); }
+body.host .after { font-size: 16px; margin-top: 12px; }
+
+/* ---------- the ten-step simulation ---------- */
+.simwrap { max-width: 1100px; margin: 0 auto; text-align: left; }
+.sim-progress { font-family: var(--mono); font-size: 0.8rem; color: #2de2c5; margin-left: 10px; white-space: nowrap; }
+.simwin { position: relative; }
+.sim-body { display: grid; grid-template-columns: 230px 1fr; gap: 8px; padding: 8px; min-height: 400px; align-items: start; }
+.sim-body.modern { grid-template-columns: 260px 1fr; gap: 14px; padding: 14px; background: #f4f7fb; color: #0d1b2a; }
+.sim-steps { list-style: none; margin: 0; padding: 0; background: #fff; border: 2px inset #fff; font-size: 11px; color: #000; }
+.sim-steps li { display: flex; gap: 6px; align-items: center; padding: 4px 6px; border-bottom: 1px solid #c0c0c0; color: #555; }
+.sim-steps li.now { background: #0a246a; color: #fff; font-weight: bold; }
+.sim-steps li.done { color: #1a6b1a; }
+.sim-steps li em { margin-left: auto; font-style: normal; font-size: 9px; font-weight: bold; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+.sim-steps li.fresh em { background: #c8f7dc; color: #0d5c33; }
+.sim-steps li.part em { background: #ffe2a8; color: #7a4d00; }
+.sim-steps li.old em { background: #e2e2e2; color: #555; }
+.sim-dot { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; flex: none; border: 1px solid currentColor; border-radius: 50%; font-size: 0.85em; font-weight: bold; }
+.sim-body.modern .sim-steps { border: 1px solid #d6dee9; border-radius: 10px; font-size: 13px; overflow: hidden; }
+.sim-body.modern .sim-steps li { padding: 7px 10px; border-bottom: 1px solid #e8edf3; }
+.sim-body.modern .sim-steps li.now { background: #1463d6; }
+.sim-body.modern .sim-steps li em { font-size: 10px; }
+
+.sim-card { padding: 10px 12px; }
+.sim-card h3 { margin: 4px 0 8px; }
+.sim-q { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: bold; }
+.sim-tag { font-size: 10px; font-weight: bold; letter-spacing: 0.06em; border-radius: 4px; padding: 2px 8px; }
+.sim-tag.fresh { background: #c8f7dc; color: #0d5c33; }
+.sim-tag.part { background: #ffe2a8; color: #7a4d00; }
+.sim-tag.old { background: #e2e2e2; color: #555; }
+.sim-hint { font-style: italic; }
+.sim-seq { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+
+/* today's EHR, and every step the deal did not fix */
+.sim-card.old { background: #d4d0c8; color: #000; border: 2px inset #fff; font: 12px Tahoma, Verdana, sans-serif; }
+.sim-card.old h3 { font-size: 13px; background: #0a246a; color: #fff; padding: 3px 8px; margin: 6px -4px 8px; }
+.sim-card.old .sim-q { font-size: 11px; color: #333; }
+.sim-card.old p { margin: 4px 0; }
+.sim-card.old .sim-rows { background: #fff; border: 2px inset #fff; max-height: 230px; overflow-y: auto; }
+.sim-card.old .sim-row { display: block; width: 100%; text-align: left; font: 10px Tahoma, Verdana, sans-serif; color: #000; background: #fff; border: 0; border-bottom: 1px solid #c0c0c0; padding: 2px 6px; cursor: pointer; }
+.sim-card.old .sim-row:hover { background: #dbe6ff; }
+.sim-card.old .sim-row.no { background: #f3c9c9; color: #7a0012; text-decoration: line-through; }
+.sim-card.old .sim-btn { font: 12px Tahoma, Verdana, sans-serif; color: #000; background: #ece9d8; border: 2px outset #fff; padding: 3px 14px; cursor: pointer; }
+.sim-card.old .sim-btn:active { border-style: inset; }
+.sim-card.old .sim-seq small { color: #555; font-size: 10px; }
+
+/* a step the deal fixed */
+.sim-card.fresh { background: #fff; color: #0d1b2a; border: 1px solid #d6dee9; border-left: 5px solid #0d7a43; border-radius: 10px; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 2px 10px rgba(13, 27, 42, 0.1); padding: 14px 18px; }
+.sim-card.fresh h3 { font-size: 1.15rem; }
+.sim-card.fresh .sim-q { font-size: 0.78rem; color: #5a6b80; }
+.sim-card.fresh .sim-btn { font: inherit; font-weight: 600; color: #fff; background: #1463d6; border: 0; border-radius: 8px; padding: 0.5em 1.1em; cursor: pointer; box-shadow: 0 2px 8px rgba(20, 99, 214, 0.35); }
+.sim-card.fresh .sim-btn:hover { background: #0f4fb0; }
+.sim-card.fresh .sim-seq small { color: #5a6b80; }
+.sim-crit { background: #ffe9ec; border-left: 4px solid #c8102e; color: #7a0012; font-weight: 600; border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
+.sim-finish h3 { color: #0d7a43; display: flex; gap: 8px; align-items: center; }
+.sim-miss { color: #b3001b; font-weight: 600; }
+.sim-also { list-style: none; padding: 0; margin: 8px 0 0; font-size: 0.9em; }
+.sim-also li { padding: 3px 0; }
+.sim-also li.yes { color: #0d7a43; }
+.sim-also li.no { color: #6b7a8d; }
+
+/* reveal: the ten steps and what each was hiding */
+.stepmap { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 14px 0; }
+.stepmap .eyebrow { margin-top: 0; }
+.stepmap-row { display: grid; grid-template-columns: auto 12em 1fr; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid rgba(255, 255, 255, 0.07); font-size: 0.9em; color: var(--muted); }
+.stepmap-row.got { color: var(--text); }
+.stepmap-row.got .sim-dot { color: var(--green); }
+.stepmap-probs .pchip { font-size: 0.72rem; margin: 1px 2px; }
+.pkg-frame { font-family: var(--mono); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pk); margin: 8px 0 0; }
+@media (max-width: 760px) {
+  .sim-body, .sim-body.modern { grid-template-columns: 1fr; }
+  .sim-steps { display: flex; flex-wrap: wrap; }
+  .sim-steps li { border: 0; padding: 3px 5px; }
+  .sim-steps li span:not(.sim-dot), .sim-steps li em { display: none; }
+  .stepmap-row { grid-template-columns: auto 1fr; }
+  .stepmap-probs { grid-column: 1 / -1; }
+}
+
+/* two competing vendors */
+.rolecounts.eight { grid-template-columns: repeat(9, 1fr); max-width: 1200px; }
+.vendorhead { grid-column: span 2; font-family: var(--mono); font-weight: 800; font-size: 0.85rem; letter-spacing: 0.12em; color: var(--blue); border-bottom: 2px solid var(--blue); padding: 4px 2px; display: flex; gap: 8px; align-items: baseline; }
+.vendorhead.rival { color: var(--accent); border-bottom-color: var(--accent); }
+.vendorhead small { font-family: inherit; font-weight: 400; letter-spacing: 0; color: var(--muted); text-transform: none; }
+
+/* budget stretch cues */
+.cuecard { text-align: left; border-radius: 12px; padding: 12px 16px; margin: 12px 0; border: 1px solid var(--amber); border-left: 6px solid var(--amber); background: rgba(255, 176, 32, 0.08); box-shadow: 0 0 18px rgba(255, 176, 32, 0.15); }
+.cuecard.grant { border-color: var(--green); border-left-color: var(--green); background: rgba(54, 214, 127, 0.07); box-shadow: 0 0 18px rgba(54, 214, 127, 0.15); }
+.cuecard-head { font-family: var(--mono); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.1em; color: var(--amber); display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+.cuecard.grant .cuecard-head { color: var(--green); }
+.cuecard ol { margin: 6px 0; padding-left: 1.3em; }
+.cuecard li { margin: 0.3em 0; }
+.cue-checks { list-style: none; padding: 0; margin: 8px 0; }
+.cue-checks li { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.cue-checks li .ic, .cue-status .ic { margin-top: 2px; }
+.cue-checks li.yes .ic, .cue-status.yes .ic { color: var(--green); }
+.cue-checks li.no .ic, .cue-status.no .ic { color: var(--red); }
+.cue-status { font-weight: 700; display: flex; gap: 8px; align-items: center; margin: 8px 0 0; }
+@media (max-width: 1000px) { .rolecounts.eight { grid-template-columns: repeat(5, 1fr); } }
+@media (max-width: 640px) { .vendorhead { grid-column: span 1; } }
+.pkg-stats b { white-space: nowrap; font-size: 0.98rem; }
+
+/* projector: keep the playable replay above the fold */
+body.host.step-p6_sim .stage { padding-top: 8px; }
+body.host.step-p6_sim .timeline { gap: 18px; margin: 0; }
+body.host.step-p6_sim .timeline h1 { font-size: 1.35rem; margin: 0; }
+body.host.step-p6_sim .timerwrap { margin: 0; }
+body.host.step-p6_sim .bigtimer { font-size: 2.2rem; text-shadow: none; }
+body.host.step-p6_sim .timerlabel { display: none; }
+body.host.step-p6_sim .center.wide > p.muted { display: none; }
+body.host.step-p6_sim .simswitch { margin: 4px 0 0; }
+body.host.step-p6_sim .simswitch + p { margin: 2px 0 6px; }
+body.host.step-p6_sim .simwrap .ehr-task { display: none; }
+body.host.step-p6_sim .after { margin-top: 6px; }
+body.host .after-alert, body.host .sim-card.fresh { font-size: 15px; }
+body.host .sim-body { min-height: 330px; }
+
+/* phones: nothing in the simulation may push the page sideways */
+body.ehr-mode { overflow-x: hidden; }
+.simwrap, .simwin { max-width: 100%; }
+.ehr-menu { overflow: hidden; white-space: nowrap; }
+
+/* the AI scribe's draft, and the choice to read it or not */
+.sim-note { background: #f6f8fb; border: 1px solid #d6dee9; border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 0.95em; line-height: 1.5; }
+.sim-card.fresh .sim-rows { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.sim-card.fresh .sim-row { font: inherit; font-weight: 600; color: #0d1b2a; background: #fff; border: 1px solid #b9c6d6; border-radius: 8px; padding: 0.5em 1em; cursor: pointer; }
+.sim-card.fresh .sim-row:first-child { background: #1463d6; border-color: #1463d6; color: #fff; box-shadow: 0 2px 8px rgba(20, 99, 214, 0.35); }
+.sim-card.fresh .sim-row:hover { border-color: #1463d6; }
+.sim-good { color: #0d7a43; font-weight: 600; }

@@ -47,7 +47,7 @@ async function state(code, auth) {
     await post('/api/action', { ...H, type: 'shuffle' });
     let s = await state(H.code, `host=${H.hostKey}`);
     console.log('seats after shuffle:', JSON.stringify(s.roleCounts));
-    for (const r of C.ROLE_ORDER) assert(s.roleCounts[r] >= 2, `role ${r} underfilled`);
+    for (const r of C.ROLE_ORDER) assert(s.roleCounts[r] >= 1, `role ${r} underfilled`);
     assert.strictEqual(Object.values(s.roleCounts).reduce((a, b) => a + b, 0), 30);
 
     const roleOf = {};
@@ -72,9 +72,10 @@ async function state(code, auth) {
     await goto('p2_merge');
     for (const id of players) {
       const res = await act(id, 'top', { problems: ['alerts', 'buried', 'medrec'] });
-      assert.strictEqual(res.ok, roleOf[id] !== 'vendor', 'only hospital players star problems');
+      assert.strictEqual(res.ok, C.ROLES[roleOf[id]].group !== 'vendor', 'only hospital players star problems');
     }
-    const vendor = players.find((id) => roleOf[id] === 'vendor');
+    const vendor = players.find((id) => roleOf[id] === 'northwind');
+    const medcore = players.find((id) => roleOf[id] === 'medcore');
     const it = players.find((id) => roleOf[id] === 'it');
     assert(!(await act(it, 'share', { secret: 've_discount' })).ok, 'cannot share another team\'s secret');
     await goto('p4_intra');
@@ -89,7 +90,7 @@ async function state(code, auth) {
     await goto('p4_inter');
     // Everyone backs D with the facilitator pack's reference deal, and asks for more than fits.
     const deal = { pkg: 'd', modules: ['governance', 'training', 'interop', 'scribe', 'discharge'], terms: ['term7', 'reference', 'bridge', 'march'] };
-    for (const id of players) if (roleOf[id] !== 'vendor') await act(id, 'ballot', { kind: 'straw', ...deal });
+    for (const id of players) if (C.ROLES[roleOf[id]].group !== 'vendor') await act(id, 'ballot', { kind: 'straw', ...deal });
     await goto('p5_vote');
     s = await state(H.code, `host=${H.hostKey}`);
     assert.strictEqual(s.decision, undefined, 'results are sealed during the vote');
@@ -102,6 +103,7 @@ async function state(code, auth) {
     assert(d.cost.total <= C.CAP + 1e-9, 'modules never push the deal over the cap');
     assert(d.dropped.length > 0, 'not everything the room wanted could be bought');
     assert(d.modules.includes('governance'), 'free governance is always affordable');
+    assert(!(await act(medcore, 'share', { secret: 've_bridge' })).ok, 'a vendor cannot publish its rival\'s offer');
     await goto('p6_reflect');
     assert((await act(players[0], 'reflect', { worst: 'alerts', fixed: 'partly', surprised: 'finance', gaveup: 'scribe', learned: 'tradeoffs' })).ok);
     await goto('reveal_point');

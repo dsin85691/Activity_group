@@ -3,7 +3,7 @@
 
   const {
     HOSPITAL, CAP, STRETCH_CAP, RESERVE, PASS, TOTAL_VOTES,
-    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS, dealCost, coverage,
+    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, SELLERS, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS, dealCost, coverage,
   } = window.CONTENT;
   const PROBLEM = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
   const MODULE = Object.fromEntries(MODULES.map((m) => [m.id, m]));
@@ -22,7 +22,7 @@
     const body = ICONS[name];
     return body ? `<svg class="ic ${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>` : '';
   }
-  const EMOJI = { '🏥': 'building-hospital', '🏛️': 'building-bank', '💰': 'coin', '🩺': 'stethoscope', '🧑‍⚕️': 'stethoscope', '👩‍⚕️': 'nurse', '💻': 'server-2', '⚖️': 'scale', '🙋': 'heart-handshake', '🤝': 'briefcase', '🩹': 'bandage', '🔁': 'refresh', '🧩': 'puzzle', '🚫': 'ban', '🎙️': 'microphone', '🔗': 'link', '🚪': 'door-exit', '📥': 'inbox', '🗄️': 'database', '🧭': 'compass', '📱': 'device-mobile', '🎓': 'school', '🎲': 'dice-5', '🔒': 'lock', '📣': 'speakerphone', '⭐': 'star', '★': 'star', '☆': 'star', '🎤': 'microphone-2', '⚠️': 'alert-triangle', '🚨': 'urgent', '📝': 'notes', '✅': 'circle-check', '❌': 'circle-x', '◐': 'circle-half-2', '👥': 'users', '⬇': 'download', '▶': 'chevron-right', '◀': 'chevron-left', '📦': 'package', '💵': 'report-money', '🪪': 'id', '🧠': 'brain', '🕸️': 'topology-star-3' };
+  const EMOJI = { '🏥': 'building-hospital', '🏛️': 'building-bank', '💰': 'coin', '🩺': 'stethoscope', '🧑‍⚕️': 'stethoscope', '👩‍⚕️': 'nurse', '💻': 'server-2', '⚖️': 'scale', '🙋': 'heart-handshake', '🤝': 'briefcase', '⏳': 'history', '⚡': 'bolt', '🩹': 'bandage', '🔁': 'refresh', '🧩': 'puzzle', '🚫': 'ban', '🎙️': 'microphone', '🔗': 'link', '🚪': 'door-exit', '📥': 'inbox', '🗄️': 'database', '🧭': 'compass', '📱': 'device-mobile', '🎓': 'school', '🎲': 'dice-5', '🔒': 'lock', '📣': 'speakerphone', '⭐': 'star', '★': 'star', '☆': 'star', '🎤': 'microphone-2', '⚠️': 'alert-triangle', '🚨': 'urgent', '📝': 'notes', '✅': 'circle-check', '❌': 'circle-x', '◐': 'circle-half-2', '👥': 'users', '⬇': 'download', '▶': 'chevron-right', '◀': 'chevron-left', '📦': 'package', '💵': 'report-money', '🪪': 'id', '🧠': 'brain', '🕸️': 'topology-star-3' };
   const EMOJI_FILL = ['⭐', '★'];
   const EMOJI_RE = new RegExp(Object.keys(EMOJI).sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gu');
   const iconize = (html) => String(html).replace(EMOJI_RE, (m) => ic(EMOJI[m], EMOJI_FILL.includes(m) ? 'fill' : ''));
@@ -49,29 +49,15 @@
     { k: 'lower', label: 'CAN WAIT', hint: 'Live with it for now' },
   ];
 
-  // ---------- Phase 1: the EHR on 6 West at 13:02 ----------
+  // ---------- the simulation's clock and its alerts ----------
 
-  // One quiet minute, then three minutes in which the lab interface resends results and every
-  // rule re-fires on all 22 orders. The gap between alerts shrinks until the system stops responding.
-  const SIM_LENGTH = 240;
-  const STORM_START = 60;
-  const LAG_START = 205;
-  const CRASH_AT = 232;
+  // One scripted minute, identical on every run. Alerts begin at second 4, come faster and faster,
+  // and the system stops responding at second 54. Nobody finishes the ten steps.
+  const SIM_LENGTH = 60;
+  const STORM_START = 4;
+  const LAG_START = 44;
+  const CRASH_AT = 54;
 
-  const CALM = {
-    physician: [
-      { title: 'Penicillin allergy: piperacillin-tazobactam ordered', sub: 'Reaction: rash, childhood. Override reason required.', reason: true },
-      { title: 'Health maintenance: influenza vaccine due', sub: 'Last documented: 10/2024' },
-      { title: 'Level of service not selected', sub: 'Required before note can be closed' },
-      { title: 'Advance directive not on file', sub: 'Ask patient at next visit' },
-    ],
-    nurse: [
-      { title: 'Pain reassessment overdue', sub: 'Oxycodone given 01:15. Reassessment not charted.' },
-      { title: 'Fall risk reassessment due', sub: 'Morse score required every shift' },
-      { title: 'Scanner battery low', sub: 'Dock device at end of shift' },
-      { title: 'Duplicate therapy: insulin glargine + insulin lispro', sub: 'Two insulin products are active', reason: true },
-    ],
-  };
   const STORM = {
     physician: [
       { title: 'New result available: BASIC METABOLIC PANEL', sub: 'Collected 08:20 · Resulted 13:02' },
@@ -124,16 +110,16 @@
   };
 
   function buildAlerts(side) {
-    const out = [12, 26, 40, 52].map((t, i) => ({ ...CALM[side][i], t }));
     const base = STORM[side];
+    const out = [];
     let t = STORM_START;
     let i = 0;
-    while (t < CRASH_AT - 1) {
+    while (t < CRASH_AT - 0.5) {
       const a = base[i % base.length];
       const again = i >= base.length;
       out.push({ ...a, t, crit: a.crit && !again, sub: again && !/RESENT/.test(a.sub) ? `${a.sub} · RESENT` : a.sub });
       const x = (t - STORM_START) / (CRASH_AT - STORM_START);
-      t += 0.66 + 5.2 * (1 - x) * (1 - x);
+      t += 0.5 + 2.9 * (1 - x) * (1 - x);
       i++;
     }
     return out;
@@ -143,39 +129,18 @@
 
   const SIM = {
     physician: {
-      task: '<b>13:02 on 6 West.</b> Mr. Whitfield\'s labs just posted. Find today\'s <b>tacrolimus level</b> and decide <b>tonight\'s dose</b>.',
-      brief: 'It is 13:02 on 6 West. Mr. Whitfield is 6 days out from a liver transplant and his labs just posted. Find today\'s tacrolimus level and decide tonight\'s dose.',
+      brief: 'Mr. Whitfield is 6 days out from a liver transplant and his labs just posted. You have ten steps: find his tacrolimus level, check his records, hold tonight\'s dose, and close the chart.',
       missed: '⚠️ <b>Drug interaction: fluconazole + tacrolimus</b>. Fluconazole may increase tacrolimus level.',
       lookalike: 'Health maintenance: influenza vaccine due',
-      truth: 'Tacrolimus was <b>19.4</b> (target 8 to 12), in row 18 of 26 with a small "H". Potassium was <b>6.2</b>. Tonight\'s dose should have been <b>held</b>.',
+      truth: 'Tacrolimus was <b>19.4</b> (target 8 to 12), on line 18 of 26 with a small "H". Potassium was <b>6.2</b>. Tonight\'s dose had to be <b>held</b>.',
     },
     nurse: {
-      task: '<b>13:02 on 6 West.</b> Give Mr. Whitfield his <b>12:30 insulin</b> and anything else that is due and <b>safe</b>. Chart the 12:00 vitals.',
-      brief: 'It is 13:02 on 6 West and you are behind. Give Mr. Whitfield his 12:30 insulin and anything else that is due and safe to give. Chart the 12:00 vitals.',
+      brief: 'You are behind. You have ten steps: check Mr. Whitfield\'s labs, give his 12:30 insulin and whatever else is safe, chart his vitals, and clear your documentation.',
       missed: '⚠️ <b>Critical lab: potassium 6.2</b>. Due now: <b>high-protein supplement (potassium 400 mg)</b>.',
       lookalike: 'Scanner battery low',
       truth: 'His potassium was <b>6.2</b>, a medical emergency. The supplement drink adds potassium. The lactulose treats a condition his new liver no longer has.',
     },
   };
-
-  // Medication pass. Each button press is one step; insulin takes ten.
-  const MAR = [
-    { id: 'insulin', text: 'insulin lispro 8 units SUBQ - sliding scale (BG 312)', due: '12:30 OVERDUE', last: '08:10',
-      steps: ['Scan patient band', 'Scan medication', 'Barcode not recognized - Override', 'Select override reason', 'Enter glucose value', 'Request second nurse', 'Witness unavailable - Bypass', 'Document injection site', 'Confirm dose', 'Sign'] },
-    { id: 'supp', text: 'High-protein supplement 240 mL PO (potassium 400 mg)', due: '13:00', last: '09:00', steps: ['Scan', 'Document'] },
-    { id: 'lact', text: 'lactulose 30 mL PO', due: '13:00', last: '09:15', steps: ['Scan', 'Barcode not recognized - Override', 'Document'] },
-    { id: 'mag', text: 'magnesium oxide 400 mg tab PO', due: '13:00', last: '09:10', steps: ['Scan', 'Document'] },
-    { id: 'hep', text: 'heparin 5,000 units SUBQ', due: '14:00', last: '06:00', steps: ['Scan', 'Too early - Override', 'Document'] },
-    { id: 'apap', text: 'acetaminophen 650 mg PO PRN (1,950 of 2,000 mg used)', due: 'PRN', last: '10:40', steps: ['Scan', 'Limit warning - Override', 'Document'] },
-    { id: 'ondan', text: 'ondansetron 4 mg IV PRN nausea', due: 'PRN', last: '08:40', steps: ['Scan', 'Document'] },
-    { id: 'pip', text: 'piperacillin-tazobactam 3.375 g IV q8h', due: '19:20', last: '11:20', steps: ['Scan', 'Too early - Override', 'Document'] },
-    { id: 'tacro', text: 'tacrolimus 4 mg cap PO', due: '21:00', last: '09:00', steps: ['Scan', 'Too early - Override', 'Document'] },
-  ];
-  const DANGER = ['supp', 'lact', 'insulin'];
-
-  // Physician order change: four clicks to change one dose.
-  const DOSE_LABEL = { continue: 'CONTINUE 4 mg', reduce: 'REDUCE to 2 mg', hold: 'HOLD tonight' };
-  const DOSE_STEPS = ['Confirm order change', 'Select reason: Clinical judgment', 'Sign order'];
 
   // ---------- state ----------
 
@@ -392,6 +357,7 @@
   }
 
   function ehrStop() {
+    sim.run = '';
     ehr.active = false;
     ehr.current = null;
     ehr.mar = {};
@@ -406,7 +372,7 @@
   // Many players dismiss many alerts: batch progress reports to one every two seconds.
   function ehrReport(extra, now) {
     if (!ehr.live) return;
-    ehr.pending = { n: ehr.n, ...(ehr.pending || {}), ...extra, n: ehr.n };
+    ehr.pending = { ...(ehr.pending || {}), ...extra, n: ehr.n };
     if (!now && Date.now() - ehr.lastSent < 2000) return;
     const body = ehr.pending;
     ehr.pending = null;
@@ -418,7 +384,7 @@
     ehr.crashed = true;
     ehr.current = null;
     ehr.queue = [];
-    ehrReport({}, true);
+    ehrReport({ steps: sim.done, given: sim.given }, true);
     const win = document.querySelector('.ehr-window, .after-window');
     if (!win || win.querySelector('.ehr-crash')) return;
     const veil = document.createElement('div');
@@ -427,7 +393,7 @@
       <div class="ehr-crash-box">
         <div class="ehr-alert-head">MedCore Legacy 9.4.1 (Not Responding)</div>
         <p><b>Session not responding.</b></p>
-        <p>The application server is out of memory.<br>Alert queue: 347 unacknowledged.</p>
+        <p>The application server is out of memory.<br>Alert queue: 347 unacknowledged across 6 West.</p>
         <p class="ehr-crash-small">Failing over to backup… backup unavailable.<br>All workstations on 6 West disconnected. Begin downtime procedures.</p>
         <button class="ehr-btn" disabled>Wait for the program to respond</button>
       </div>`;
@@ -495,511 +461,288 @@
     const report = {};
     if (ehr.current.crit) report.critMs = Date.now() - ehr.shownAt;
     ehr.current = null;
-    ehr.gapUntil = Date.now() + (ehr.live && ehrElapsed() > STORM_START ? 160 : 400);
+    ehr.gapUntil = Date.now() + 160;
     const layer = document.getElementById('ehr-alert');
     if (layer) layer.classList.remove('show');
     ehrReport(report, 'critMs' in report);
+    renderSim();
   }
 
-  function marCell(med) {
-    const done = ehr.mar[med.id] || 0;
-    if (done >= med.steps.length) return '<span class="mar-given">Given 13:0' + ((MAR.indexOf(med) % 6) + 3) + ' ✓</span>';
-    const label = med.steps[done];
-    const warn = /Override|Bypass/.test(label);
-    return `${done ? `<span class="mar-step">step ${done + 1} of ${med.steps.length}</span> ` : ''}<button class="ehr-btn sm ${warn ? 'warn' : ''}" data-act="mar" data-med="${med.id}">${esc(label)}</button>`;
-  }
+  // ---------- the frozen simulation: ten steps, the same every run ----------
+  // Each step names the task, the problems it exposes (`probs`), and the problem whose fix changes it (`gov`).
+  // A step has up to three versions: `old` (today's EHR), `part` (partly fixed) and `fresh` (fixed).
+  // A version shows `html`, may ask the player to find one line among `rows`, and then has `seq`: buttons pressed in order.
 
-  function marClick(id) {
-    const med = MAR.find((m) => m.id === id);
-    if (!med || ehr.crashed) return;
-    const done = ehr.mar[id] || 0;
-    if (done >= med.steps.length) return;
-    ehr.mar[id] = done + 1;
-    const cell = document.querySelector(`[data-mar="${id}"]`);
-    if (cell) cell.innerHTML = marCell(med);
-    if (ehr.mar[id] >= med.steps.length && DANGER.includes(id)) {
-      ehrReport({ given: DANGER.filter((m) => (ehr.mar[m] || 0) >= MAR.find((x) => x.id === m).steps.length) }, true);
-    }
-  }
+  const LAB_ROWS = ['Sodium 134', 'Potassium 6.2 H', 'Chloride 101', 'CO2 21 L', 'BUN 48 H', 'Creatinine 2.4 H', 'eGFR 29 L', 'Glucose 312 H', 'Calcium 8.4 L', 'Magnesium 1.3 L', 'Phosphorus 3.9', 'AST 76 H', 'ALT 132 H', 'Alk Phos 141 H', 'T. Bili 1.8 H', 'Albumin 2.6 L', 'INR 1.2 H', 'Tacrolimus 19.4 H', 'WBC 14.6 H', 'Hemoglobin 8.7 L', 'Hematocrit 26.4 L', 'Platelets 104 L', 'Lactate 2.9 H', 'Triglycerides 171 H', 'Urine output 26 L', 'CMV PCR pending'];
 
-  function doseCell() {
-    const d = ehr.dose;
-    if (!d) {
-      return Object.keys(DOSE_LABEL).map((k) => `<button class="ehr-btn sm" data-act="dose" data-dose="${k}">${DOSE_LABEL[k]}</button>`).join(' ');
-    }
-    if (d.step >= DOSE_STEPS.length) return `<span class="mar-given">Signed: ${DOSE_LABEL[d.choice]} ✓</span>`;
-    return `<span class="mar-step">${DOSE_LABEL[d.choice]} · step ${d.step + 2} of ${DOSE_STEPS.length + 1}</span> <button class="ehr-btn sm" data-act="dose" data-dose="${d.choice}">${DOSE_STEPS[d.step]}</button>`;
-  }
-
-  function doseClick(choice) {
-    if (ehr.crashed) return;
-    if (!ehr.dose) ehr.dose = { choice, step: 0 };
-    else if (ehr.dose.step < DOSE_STEPS.length) ehr.dose.step++;
-    const cell = document.querySelector('[data-dosecell]');
-    if (cell) cell.innerHTML = doseCell();
-    if (ehr.dose.step >= DOSE_STEPS.length) ehrReport({ dose: ehr.dose.choice }, true);
-  }
-
-  // ---------- the chart: every one of the 15 problems is on these two screens ----------
-
-  // Deterministic jitter so every student reads the identical chart.
-  function seeded(seed) {
-    let x = seed;
-    return () => {
-      x = (x * 1664525 + 1013904223) % 4294967296;
-      return x / 4294967296;
-    };
-  }
-
-  function labsTable() {
-    const rand = seeded(67);
-    const dates = ['09/29 13:02', '09/28', '09/27', '09/26', '09/25', '09/24'];
-    // name, low, high, unit, then either six explicit values (newest first) or one typical value
-    const labs = [
-      ['Sodium', 135, 145, 'mmol/L', 134], ['Potassium', 3.5, 5.0, 'mmol/L', [6.2, 5.0, 4.7, 4.5, 4.3, 4.4]], ['Chloride', 98, 107, 'mmol/L', 101],
-      ['CO2', 22, 29, 'mmol/L', 21], ['BUN', 7, 20, 'mg/dL', [48, 34, 30, 31, 36, 33]], ['Creatinine', 0.7, 1.3, 'mg/dL', [2.4, 1.6, 1.5, 1.7, 1.9, 1.7]],
-      ['eGFR', 60, 200, 'mL/min', [29, 47, 51, 44, 38, 44]], ['Glucose', 70, 140, 'mg/dL', [312, 218, 262, 231, 244, 286]], ['Calcium', 8.6, 10.2, 'mg/dL', 8.4],
-      ['Magnesium', 1.7, 2.2, 'mg/dL', [1.3, 1.4, 1.5, 1.5, 1.6, 1.8]], ['Phosphorus', 2.5, 4.5, 'mg/dL', 3.9], ['AST', 10, 40, 'U/L', [76, 98, 164, 290, 510, 842]],
-      ['ALT', 7, 40, 'U/L', [132, 170, 241, 350, 480, 615]], ['Alk Phos', 40, 120, 'U/L', 141], ['T. Bili', 0.2, 1.2, 'mg/dL', [1.8, 2.1, 2.7, 3.5, 4.6, 5.8]],
-      ['Albumin', 3.5, 5, 'g/dL', 2.6], ['INR', 0.9, 1.1, '', [1.2, 1.2, 1.3, 1.4, 1.6, 1.9]], ['Tacrolimus', 8, 12, 'ng/mL', [19.4, 11.6, 7.4, 5.1, 3.2, null]],
-      ['WBC', 4, 11, 'K/uL', [14.6, 13.8, 13.1, 12.5, 11.2, 9.8]], ['Hemoglobin', 13.5, 17.5, 'g/dL', [8.7, 8.8, 8.6, 8.3, 8.1, 8.4]], ['Hematocrit', 41, 53, '%', 26.4],
-      ['Platelets', 150, 400, 'K/uL', [104, 92, 79, 66, 58, 54]], ['Lactate (POC)', 0.5, 2.0, 'mmol/L', [2.9, null, null, null, null, null]], ['Triglycerides', 0, 150, 'mg/dL', 171],
-      ['Urine output', 30, 999, 'mL/h', [26, 48, 55, 52, 31, 40]], ['CMV PCR', 0, 0, '', ['pend', 'ND', null, null, null, null]],
-    ];
-    const rows = labs
-      .map(([name, lo, hi, unit, v]) => {
-        const cells = dates
-          .map((_, i) => {
-            const val = Array.isArray(v) ? v[i] : v * (1 + (rand() - 0.5) * 0.12);
-            if (val === null) return '<td>-</td>';
-            if (typeof val === 'string') return `<td>${val}</td>`;
-            const text = val < 20 ? val.toFixed(1) : val.toFixed(0);
-            const flag = val > hi ? ' H' : val < lo ? ' L' : '';
-            return `<td>${text}${flag}</td>`;
-          })
-          .join('');
-        return `<tr><td>${name}</td>${cells}<td>${lo} to ${hi} ${unit}</td></tr>`;
-      })
-      .join('');
-    return `<div class="ehr-box"><h4>Results - Chemistry / Hematology / Drug Levels / Other (all dates) - 26 components</h4>
-      <table><tr><th>Component</th>${dates.map((d) => `<th>${d}</th>`).join('')}<th>Ref range</th></tr>${rows}</table></div>`;
-  }
-
-  const VITALS = `<div class="ehr-box"><h4>Vitals - 09/29</h4>
-    <table><tr><th>Time</th><th>Temp</th><th>HR</th><th>BP</th><th>RR</th><th>SpO2</th><th>Pain</th><th>Wt</th><th>EWS</th></tr>
-    <tr><td>12:00</td><td>37.9</td><td>108 H irreg</td><td>156/92 H</td><td>20</td><td>93% 2L</td><td>3/10</td><td>-</td><td>5</td></tr>
-    <tr><td>10:30</td><td>38.1 H</td><td>104 H</td><td>152/90 H</td><td>18</td><td>95% RA</td><td>3/10</td><td>-</td><td>3</td></tr>
-    <tr><td>08:00</td><td>37.4</td><td>92</td><td>148/88</td><td>18</td><td>96% RA</td><td>3/10</td><td>94.2</td><td>1</td></tr>
-    <tr><td>04:00</td><td>37.2</td><td>88</td><td>142/84</td><td>16</td><td>96% RA</td><td>2/10</td><td>-</td><td>0</td></tr></table></div>`;
-
-  const list = (items) => `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
-  const box = (title, inner) => `<div class="ehr-box"><h4>${title}</h4>${inner}</div>`;
-
-  const HOME_A = ['warfarin 5 mg tab - 1 tab PO daily', 'metFORMIN 1000 mg tab - 1 tab PO BID', 'furosemide 40 mg - 1 tab PO daily', 'spironolactone 100 mg - 1 tab PO daily', 'lactulose 30 mL PO TID', 'rifAXIMin 550 mg - 1 tab PO BID', 'sertraline 50 mg - 1 tab PO daily', 'lisinopril 10 mg - 1 tab PO daily'];
-  const HOME_B = ['apixaban 5 mg - 1 tab PO BID', 'insulin glargine 14 units SUBQ nightly', 'furosemide 40 mg daily', 'spironolactone 50 mg daily', 'lactulose 30 mL TID', 'rifAXIMin 550 mg BID', 'sertraline 100 mg daily', 'amLODIPine 5 mg daily', 'dilTIAZem ER 120 mg daily', 'pantoprazole 40 mg daily'];
-  const HOME_C = ['(pharmacy note 09/29 09:50, free text) Per daughter by phone: NO warfarin, NO metformin, NO spironolactone (stopped 09/2026 high K). Takes ibuprofen 400 mg "a few times a week." Not entered in medication list.'];
-
-  function physicianBody() {
-    const problems = [
-      'Status post liver transplant (Z94.4) - POD 6', 'Cirrhosis due to MASH (K74.60)', 'Ascites (R18.8)', 'Hepatic encephalopathy, grade 2 (K76.82)',
-      'Type 2 diabetes mellitus w/ hyperglycemia (E11.65)', 'Chronic kidney disease, stage 3b (N18.32)', 'Paroxysmal atrial fibrillation (I48.0)',
-      'Essential hypertension (I10)', 'Major depressive disorder, in remission (F32.5)', 'Thrombocytopenia (D69.6)', 'Fever, unspecified (R50.9)', 'Hypertension (I10) - DUPLICATE',
-    ];
-    const ordersTop = [
-      'mycophenolate 1,000 mg PO BID - active', 'predniSONE 20 mg PO daily - active (taper)', 'valGANciclovir 450 mg PO daily - active', 'trimethoprim-sulfamethoxazole 80/400 mg PO daily - active',
-      'fluconazole 200 mg PO daily - active (started 09/27)', 'insulin glargine 18 units SUBQ nightly - active', 'insulin lispro sliding scale SUBQ - active', 'dilTIAZem ER 120 mg PO daily - active (restarted 09/26)',
-      'sertraline 100 mg PO daily - active', 'ondansetron 4 mg IV q8h PRN - active', 'heparin 5,000 units SUBQ q8h - active', 'piperacillin-tazobactam 3.375 g IV q8h - active (started 11:00)',
-    ];
-    const ordersBottom = [
-      'pantoprazole 40 mg PO daily - active', 'magnesium oxide 400 mg PO BID - active', 'aspirin 81 mg PO daily - active', 'amLODIPine 5 mg PO daily - active', 'oxyCODONE 5 mg PO q6h PRN - active',
-      'acetaminophen 650 mg PO q6h PRN - active', 'senna-docusate PO BID - active', 'lactulose 30 mL PO TID - active (from admission list)', 'rifAXIMin 550 mg PO BID - active (from admission list)',
-      'High-protein supplement TID - active (nutrition)', 'Diet: low potassium - active (nephrology 09/28)', 'apixaban - ON HOLD since admission', 'furosemide - ON HOLD since 09/25',
-    ];
-    const copied =
-      'HPI: 61 y.o. male with decompensated cirrhosis due to MASH c/b ascites, hepatic encephalopathy, MELD-Na 32, admitted for OLT. ' +
-      'Exam: oriented to person and place, slow to answer, mild asterixis. Sclerae icteric. Abdomen distended with fluid wave, non-tender. LE edema to knees. ' +
-      'A/P: 1) Liver transplant - cont tacrolimus 4 mg BID goal 8-12, f/u level; cont mycophenolate, prednisone. 2) ID ppx - cont valganciclovir, TMP-SMX, fluconazole. ' +
-      '3) CKD - Cr at baseline, avoid nephrotoxins, renal following. 4) DM - endocrine adjusting insulin. 5) AF - rate controlled on diltiazem, apixaban on hold. 6) HTN - cont amlodipine. ' +
-      '7) Hepatic encephalopathy grade 2 - cont lactulose, rifaximin, titrate to 3 BM daily. 8) Ascites - cont diuretics, paracentesis PRN. 9) Depression - cont sertraline. 10) Dispo - target d/c 10/02. ' +
-      'Total time 35 min, >50% counseling and coordination of care. Level of service 99233.';
-    const note = (date, author, head, extra) => `
-      <div class="ehr-note">
-        <div class="ehr-note-head">${date} - ${head} - ${author} - <i>signed</i> - 11 pages</div>
-        <p>${extra || ''} ${copied}</p>
-      </div>`;
-    return `
-      <div class="ehr-cols">
-        ${box('Problem List (12)', list(problems))}
-        ${box('Home Medications - Source 1: imported from outside discharge 03/2026 (8)', list(HOME_A))}
-        ${box('Home Medications - Source 2: clinic letter 08/2026 [SCANNED IMAGE] (10)', list(HOME_B) + list(HOME_C))}
-      </div>
-      <div class="ehr-cols">
-        <div class="ehr-box"><h4>Active Orders (22 + 3 other)</h4><ul>
-          ${ordersTop.map((o) => `<li>${o}</li>`).join('')}
-          <li><b>tacrolimus 4 mg PO BID</b> - next dose 21:00 - <span data-dosecell>${doseCell()}</span></li>
-          ${ordersBottom.map((o) => `<li>${o}</li>`).join('')}
-        </ul></div>
-        <div>
-          ${box('Predictive Models (1)', `<table><tr><th>Model</th><th>Score</th><th>Band</th></tr><tr><td>Sepsis Risk v2.3</td><td>0.71</td><td>HIGH</td></tr>
-            <tr><td colspan="3">Validated accuracy: not available · Transplant / steroid patients: not evaluated · Model owner: (blank) · Last reviewed: never · Fired 12 times today</td></tr></table>`)}
-          ${box('Consults (8) - open each tab to read', list(['Infectious Disease 09/27 - [tab: Consults ▸ ID]', 'Nephrology 09/28 - [tab: Consults ▸ Renal]', 'Cardiology 09/26 - [tab: Consults ▸ Cards]', 'Endocrinology 09/28 - [tab: Consults ▸ Endo]', 'Transplant Pharmacy 09/29 - [tab: Pharmacy Notes]', 'Nutrition 09/27 - [tab: Ancillary]', 'Social Work 09/28 - [tab: Ancillary]', 'Physical Therapy 09/29 - [tab: Rehab]']))}
-          ${box('Care Team Plan of Care', list(['Surgery (09/29 09:15): continue tacrolimus 4 mg BID', 'Nephrology (09/28 16:40): see consult tab', 'Nursing handoff (07:00): "surgery might change the tacrolimus"', 'Pharmacy: interaction review pending today\'s level']))}
-        </div>
-        <div>
-          ${box('In Basket - 140 unread', list(['Refill request: sertraline (pt: HALVORSEN)', 'Result: routine CBC (pt: ADEYEMI)', 'Portal msg: E. Whitfield "is the fever serious?"', 'Portal msg: E. Whitfield "what is the discharge date?"', 'Result: CXR 09/29 11:15 - WHITFIELD - new R lower lung haziness', 'Coding query: clarify "acute kidney injury"', 'Result: ECG 09/29 11:40 - WHITFIELD - QTc 492', 'Staff message: parking validation update', 'Result: EXPLANT PATHOLOGY - WHITFIELD', 'Cosign needed: verbal order x6', '… 130 more']))}
-          ${box('Media (3)', list(['Outside records.pdf - 84 pages - SCANNED IMAGE - not searchable - received 09/29 10:05 - not opened', 'US LIVER DOPPLER 09/28 - report filed here, not under Imaging', 'Transplant clinic letter 08/2026']))}
-        </div>
-      </div>
-      ${VITALS}
-      ${labsTable()}
-      <div class="ehr-box"><h4>Notes (showing 6 of 212)</h4>
-        ${note('09/29/2026 09:15', 'Chen, L MD', 'Progress Note POD 6', 'Overnight events: none reported. Slept poorly, mild nausea. Labs: pending at time of note. US yesterday normal.')}
-        ${note('09/28/2026 08:50', 'Chen, L MD', 'Progress Note POD 5', 'Tacrolimus 11.6. K 5.0.')}
-        ${note('09/27/2026 15:30', 'Reyes, S MD', 'ID Consult', 'Candida in drain fluid. Rec fluconazole 200 mg daily x14d. NOTE: fluconazole will raise tacrolimus levels; suggest reducing tacrolimus dose and re-checking level in 48-72h. Penicillin allergy low risk, rec delabel.')}
-        ${note('09/27/2026 09:05', 'Chen, L MD', 'Progress Note POD 4', 'Tacrolimus increased to 4 mg BID.')}
-        ${note('09/28/2026 16:40', 'Park, H MD', 'Nephrology Consult', 'Cr 1.6, K 5.0 rising x3d, UOP falling. If creatinine above 2.0 or tacrolimus above 12 tomorrow, HOLD next tacrolimus dose and call nephrology. Consider stopping TMP-SMX if K above 5.5.')}
-        ${note('09/22/2026 22:15', 'Chen, L MD', 'Admission H&P', 'Called in for deceased-donor liver offer.')}
-      </div>
-      <div class="ehr-cols">
-        ${box('Discharge Checklist - target 10/02 (0 of 9 complete)', list(['Clinic visits - Outpatient Scheduling system', 'Lab draws - paper standing order (fax)', 'Tacrolimus / valganciclovir - Specialty Pharmacy portal - PRIOR AUTH PENDING', 'Prescriptions - Discharge module - BLOCKED: med rec incomplete', 'Home health - phone / fax', 'Transport 90 mi - phone', 'Diabetes teaching - Education module', 'Medication teaching - Education module', 'Outside kidney doctor - phone, 2 calls not returned']))}
-        ${box('Charges / Coding / Quality', list(['99233 - Subsequent hospital care - LEVEL OF SERVICE REQUIRED', '47135 - Liver allotransplantation', '76705 - US abdomen limited', 'Z94.4, K74.60, E11.65, N18.32, I48.0, R50.9', 'HCC 27, HCC 18, HCC 138 - recapture needed', 'Quality: VTE prophylaxis - 7 fields incomplete', 'Quality: sepsis bundle timer - STARTED 10:42']))}
-        ${box('Allergies / Demographics', list(['Allergies/Intolerances: 1 active - PENICILLIN (rash, childhood) - unverified', 'lisinopril - hyperkalemia (outside clinic note; not in allergy list)', 'Address: Carver County (90 mi) - UNVERIFIED', 'Health care proxy: daughter', 'Portal: active - results release delay 72 h', 'Interpreter: not needed']))}
-      </div>`;
-  }
-
-  function nurseBody() {
-    const flow = (title, rows) =>
-      `<div class="ehr-box"><h4>${title}</h4><table>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></div>`;
-    const blanks = [['Temp', '____'], ['Heart rate', '____'], ['Blood pressure', '____'], ['Resp rate', '____'], ['SpO2 / O2', '____'], ['Pain score', '____']];
-    const tasks = [
-      'Fall risk (Morse) - 45 - DUE 16:00', 'Braden skin assessment - DUE', 'Pain reassessment after oxycodone 01:15 - OVERDUE', 'Surgical drain amount / color - DUE 16:00',
-      'Intake & output - not charted', 'Neurological check - DUE 15:30', 'Incision check - DUE 19:00', 'Central line dressing - verify date', 'Patient education: transplant meds - session 3 of 4 not documented',
-      'Vital signs q4h - DUE 12:00', 'Vital signs q4h - DUE 12:00 (duplicate)', 'Care plan update - OVERDUE', 'Discharge planning screen - DUE', 'Hourly rounding - last 12:00',
-    ];
-    return `
-      <div class="ehr-box"><h4>MAR - Due now and upcoming (9) - scan each medication to document</h4>
-        <table>
-          <tr><th>Medication</th><th>Due</th><th>Last given</th><th>Action</th></tr>
-          ${MAR.map((m) => `<tr><td>${m.text}</td><td>${m.due}</td><td>${m.last}</td><td data-mar="${m.id}">${marCell(m)}</td></tr>`).join('')}
-        </table>
-      </div>
-      <div class="ehr-cols">
-        ${box('Worklist - required documentation (14 tasks)', list(tasks))}
-        <div>
-          ${flow('Flowsheet: Vital Signs - enter 12:00 set', blanks)}
-          <div class="ehr-box"><h4>Save</h4><div class="ehr-save"><button class="ehr-btn sm" data-act="ehr-save">Save vitals</button> <span data-savemsg></span></div></div>
-        </div>
-        <div>
-          ${flow('Transplant Module: Vital Signs (re-enter same values)', blanks)}
-          ${flow('Intake & Output screen (re-enter weight, drain, urine)', [['Weight', '____ kg'], ['Drain output', '____ mL'], ['Urine', '____ mL'], ['Oral / IV', '____ mL'], ['Net', 'not calculated']])}
-        </div>
-      </div>
-      ${labsTable()}
-      <div class="ehr-cols">
-        ${flow('Early Warning Score', [['04:00', '0'], ['08:00', '1'], ['10:30', '3'], ['12:00', '5'], ['Action at 5 or more', 'urgent physician review - not requested']])}
-        ${flow('Provider contact', [['Resident', 'pager 4471'], ['Attending', 'see call schedule (PDF)'], ['Page sent 05:50', 'low urine output - no callback recorded'], ['Told at 10:35', 'fever 38.1']])}
-        ${flow('Intake & Output - so far today', [['Urine', '210 mL in 8 h (26 mL/h)'], ['Drain', '60 mL thin pink'], ['Intake', '900 mL'], ['Weight', '94.2 kg (+1.3 kg)']])}
-      </div>
-      <div class="ehr-box"><h4>Nursing Notes (showing 4 of 88)</h4>
-        <div class="ehr-note"><div class="ehr-note-head">09/29/2026 12:45 - Shift note (day) - <i>draft</i></div><p>07:30 assessment done, alert and oriented x4. 09:00 tacrolimus 4 mg given as ordered, no hold order in chart, level not back. 10:30 T 38.1 HR 104, Dr. Chen told. 11:20 pip-tazo started, allergy alert overridden by MD. 12:00 HR 108 irreg, BP 156/92, O2 2L. 12:30 BG 312, lispro 8 units due. Daughter phoned x2.</p></div>
-        <div class="ehr-note"><div class="ehr-note-head">09/29/2026 06:30 - Shift note (night) - <i>signed</i></div><p>Slept in short stretches. Pain 2-4/10, oxycodone x1 at 01:15. BG 198 at 02:00. 05:30 pt states hands "feel shaky" holding cup, thought to be poor sleep. Urine output 210 mL this shift, darker than yesterday; surgery resident paged 05:50, no callback. One loose stool after lactulose. Labs drawn 05:40, sample clotted, redraw needed. Wt 94.2 kg, up 1.3 kg. Handoff: surgery "might change the tacrolimus." No new order seen.</p></div>
-        <div class="ehr-note"><div class="ehr-note-head">09/28/2026 19:40 - Shift note - <i>signed</i></div><p>Pt A&Ox4, afebrile. Tolerating diet 40%. Refused evening mycophenolate for nausea. Tacrolimus dose not in cabinet, pharmacy sending, given 22:40. Fall precautions in place. Call light within reach. Will continue to monitor.</p></div>
-        <div class="ehr-note"><div class="ehr-note-head">09/28/2026 07:30 - Shift note - <i>signed</i></div><p>Pt A&Ox4, afebrile. Fall precautions in place. Call light within reach. Pt education provided. Will continue to monitor.</p></div>
-      </div>
-      <div class="ehr-cols">
-        ${box('Medication history - 3 sources', list(['Source 1 (outside 03/2026): warfarin, metformin, spironolactone 100…', 'Source 2 (clinic letter, scanned): apixaban, insulin glargine…', 'Source 3 (pharmacy free-text note): daughter says no warfarin, no metformin; takes ibuprofen']))}
-        ${box('Diet orders', list(['Low potassium diet - nephrology 09/28', 'High-protein supplement TID (potassium 400 mg each) - nutrition 09/27', 'Consistent carbohydrate']))}
-        ${box('Discharge tasks (nursing)', list(['Diabetes teaching - not started', 'Medication teaching - 2 of 4', 'Case manager - see sticky notes at desk']))}
-      </div>`;
-  }
-
-  function ehrChart(side) {
-    const tabs = ['Summary', 'Chart Review', 'Results', 'MAR', 'Orders', 'Notes', 'Consults ▸', 'Flowsheets', 'Transplant Module', 'Imaging', 'Media', 'Pharmacy Notes', 'Ancillary', 'Rehab', 'Charges', 'Discharge', 'Care Everywhere'];
-    const on = side === 'nurse' ? 'MAR' : 'Summary';
-    const role = ROLES[S.you.role];
-    const head = S.you.role === side
-      ? SIM[side].task
-      : `<span class="ehr-shadow">You are watching the ${side} screen.</span> <b>Your job:</b> ${esc(role.observe)}`;
-    return `
-      <div class="ehr">
-        <div class="ehr-task">
-          <div>${head}</div>
-          <div class="ehr-task-timer" data-timer></div>
-        </div>
-        <div class="ehr-window">
-          <div class="ehr-titlebar">MedCore Legacy 9.4.1 - RIVERBEND UNIV HOSP - PRD - [${side === 'nurse' ? 'Medication Administration' : 'Chart Review'}]<span class="ehr-lagtag"> (Not Responding)</span></div>
-          <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Quality</span><span>Help</span></div>
-          <div class="ehr-banner">
-            <b>WHITFIELD, JAMES R</b> | 61 y.o. M | DOB 03/11/1965 | MRN RUH-4471902 | CSN 90217754 | Ht 178 cm | Wt 94.2 kg | BMI 29.7 |
-            Attending: Raman, P MD | Surg: Okafor, T MD | Ins: COMMERCIAL - PRIOR AUTH REQ | Code: FULL | Isolation: PROTECTIVE | Lang: English |
-            Allergies/Intolerances: 1 active (see Allergy activity) | Bed: 6W-14 | LOS: 7d | POD 6 s/p OLT | Readmit risk: 31% | HCC score: 3.12 |
-            Sepsis Risk: 0.71 HIGH | EWS: see flowsheet | Portal: ACTIVE (72 h delay) | Outside records: 1 new (Media) | In Basket: 140 unread
-          </div>
-          <div class="ehr-tabs">${tabs.map((t) => `<span class="${t === on ? 'on' : ''}">${t}</span>`).join('')}</div>
-          <div class="ehr-scroll">${side === 'nurse' ? nurseBody() : physicianBody()}</div>
-          <div class="ehr-status">Ready | 212 notes | 26 results | 22 orders | 8 consults | User: YOU | Lab interface: RETRYING | Session expires in 14:59 | CAPS</div>
-          <div id="ehr-alert" class="ehr-alert"></div>
-        </div>
-      </div>`;
-  }
-
-  // ---------- Phase 6: the same minute, under the system the room chose ----------
-
-  // Each panel is one of the 15 problems shown as fixed, partly fixed, or unchanged.
-  const AFTER = {
+  const SCRIPT = {
     physician: [
-      { problem: 'alerts', title: 'Alerts at 13:02',
-        fixed: (d) => `<div class="crit-alert">🚨 TACROLIMUS INTERACTION: fluconazole + diltiazem are raising the level<span>Hold tonight's dose · Page transplant pharmacy</span></div><p><b>${PACKAGES[d.pkg].alertsAfter} alerts</b> in three minutes, where there were 347. Routine reminders went to a quiet checklist.</p>`,
-        broken: '<p><b>347 alerts</b> in three minutes. The interaction warning still looks like the flu-shot reminder.</p>' },
-      { problem: 'buried', title: 'Critical results',
-        fixed: '<p><b class="red">Tacrolimus 19.4 - CRITICAL.</b> Paged to Dr. Raman at 13:02, acknowledged at 13:03.</p><p><b class="red">Potassium 6.2 - CRITICAL</b>, pinned to the top.</p>',
-        broken: '<p>Tacrolimus 19.4 H sits in row 18 of 26. No critical threshold was ever set.</p>' },
-      { problem: 'medrec', title: 'Medication list',
-        fixed: '<p>One reconciled list. Warfarin and metformin removed. <b>Ibuprofen at home</b> flagged as a kidney risk. Lactulose and rifaximin closed.</p>',
-        broken: '<p>Three lists that disagree. Warfarin and metformin are still "active."</p>' },
-      { problem: 'find', title: 'Finding information',
-        fixed: '<p>Search "ultrasound" → <b>Liver Doppler 09/28: artery flow reading 0.48, below range.</b> Recommendation shown first.</p>',
-        broken: '<p>The ultrasound is under scanned media. It took 12 minutes to find.</p>' },
-      { problem: 'bloat', title: 'Today\'s note',
-        fixed: '<p>📝 One page, drafted from the bedside conversation. What changed since yesterday is highlighted. <b>Review and sign.</b></p>',
-        partial: '<p>Notes are shorter and show what changed. You still type them yourself, at night.</p>',
-        broken: '<p>Eleven pages. Two of them are new.</p>' },
-      { problem: 'copy', title: 'Copied-forward text',
-        fixed: '<p>Copied text carries its original date. "Grade 2 encephalopathy" and "ascites" were flagged as outdated and closed.</p>',
-        partial: '<p>Copied text now shows its original date. Nobody has closed the old problems yet.</p>',
-        broken: '<p>Today\'s note still says "grade 2 encephalopathy, continue lactulose."</p>' },
-      { problem: 'interop', title: 'Outside records',
-        fixed: '<p>The outside records arrived as data. <b>Resistant <i>E. coli</i>, March 2026</b> is flagged on the antibiotic order. The contrast dye reaction is on the allergy list.</p>',
-        partial: '<p>Medication history imports automatically. The 84-page fax is still a scanned image.</p>',
-        broken: '<p>An 84-page fax, scanned as one image, unopened.</p>' },
-      { problem: 'inbox', title: 'In Basket',
-        fixed: '<p>3 urgent items on top: chest x-ray, ECG, pathology. 137 routine items routed to the team pool.</p>',
-        broken: '<p>140 unread. The chest x-ray, the ECG, and the pathology report are in there somewhere.</p>' },
-      { problem: 'handoff', title: 'One plan of care',
-        fixed: '<p>Nephrology\'s "hold if the level is above 12" appears on the tacrolimus order. Nurse, physician, and pharmacy see the same plan.</p>',
-        partial: '<p>Consult recommendations now sit beside the order they affect. The discharge plan is still scattered.</p>',
-        broken: '<p>Surgery says continue. Nephrology says hold. The night nurse heard "might change."</p>' },
-      { problem: 'ai', title: 'Sepsis model',
-        fixed: '<p>Sepsis model: <b>owner Dr. Raman · validated in transplant patients · reviewed quarterly.</b> It fired once, not twelve times.</p>',
-        partial: '<p>The sepsis model is switched off pending review. It has no owner yet.</p>',
-        broken: (d) => (d.pkg === 'keep' ? '<p>Sepsis risk 0.71 HIGH. Accuracy: not available. Owner: blank. Fired 12 times.</p>' : '<p>The sepsis model is switched off. Without governance, no AI tool may run.</p>') },
-      { problem: 'clicks', title: 'Changing one dose',
-        fixed: '<p>Hold tonight\'s tacrolimus: two clicks.</p>',
-        broken: '<p>Four clicks and a reason dropdown to change one dose.</p>' },
-      { problem: 'docburden', title: 'Required fields',
-        fixed: '<p>Billing level and quality fields are filled from the note. Nothing blocks you from closing the chart.</p>',
-        partial: '<p>Fewer hard stops. The billing level is still yours to pick.</p>',
-        broken: '<p>"Level of service required." "7 quality fields incomplete."</p>' },
+      { short: 'Find the tacrolimus level', task: "Find today's tacrolimus level.", probs: ['buried', 'find', 'ui'], gov: 'buried',
+        old: { html: '<p>Results: 26 components. No critical threshold was ever set for tacrolimus.</p>', rows: LAB_ROWS, answer: 17 },
+        fresh: { html: '<div class="sim-crit">Tacrolimus 19.4 ng/mL: CRITICAL (target 8 to 12)</div><div class="sim-crit">Potassium 6.2 mmol/L: CRITICAL</div><p>Paged to Dr. Raman at 13:02. The other 24 results are normal or unchanged.</p>', seq: ['Acknowledge'] } },
+      { short: 'Confirm home medicines', task: 'Confirm what he takes at home.', probs: ['medrec', 'dupes'], gov: 'medrec',
+        old: { html: '<p>Three sources disagree: an outside discharge list (warfarin, metformin), a scanned clinic letter (apixaban, insulin), and a pharmacy free-text note (ibuprofen at home).</p>', seq: ['Open list 1 of 3', 'Open list 2 (scanned image)', 'Open the pharmacy note', 'Reconcile by hand', 'Re-type 11 medications', 'Save'] },
+        fresh: { html: '<p><b>One reconciled list.</b> Warfarin and metformin removed. Ibuprofen at home flagged as a kidney risk. Lactulose and rifaximin closed.</p>', seq: ['Confirm the list'] } },
+      { short: "Read today's note", task: "Find what changed in today's note.", probs: ['bloat', 'copy'], gov: 'bloat',
+        old: { html: '<p>Progress note, 11 pages. Most of it was carried forward from admission.</p>', answer: 7,
+          rows: ['Page 1: History (copied from 09/22)', 'Page 2: Exam: "abdomen distended with fluid" (copied from 09/22)', 'Page 3: Medication list (imported)', 'Page 4: Labs 09/24 to 09/28 (imported)', 'Page 5: Imaging (imported)', 'Page 6: Plan items 1 to 6 (copied from 09/28)', 'Page 7: Plan item 7: "grade 2 encephalopathy, continue lactulose" (copied from 09/22)', 'Page 8: Fever 38.1, cultures sent, antibiotic started', 'Page 9: Billing statement (template)', 'Page 10: Quality attestations (template)', 'Page 11: Signature block'] },
+        part: { html: '<p>The note is now 4 pages, and copied text shows its original date.</p>', seq: ["Scroll to today's changes", 'Sign'] },
+        // The AI scribe's draft is short and mostly right. It also carries one error forward. Signing without reading has a cost.
+        fresh: { html: '<p><b>One page, drafted by the AI scribe from the bedside conversation.</b></p><div class="sim-note"><b>Today:</b> fever 38.1 at 10:30, cultures sent, piperacillin-tazobactam started. Tacrolimus 19.4, critical. Potassium 6.2.<br><b>Plan:</b> hold the 21:00 tacrolimus and recheck the level. Continue lactulose three times daily. Follow cultures. Target discharge October 2.</div>', any: true,
+          rows: [
+            { t: 'Sign the note', flag: 'signed_blind', say: 'Signed. One click.' },
+            { t: 'Read it line by line before signing', flag: 'caught', say: 'You found it: "continue lactulose" is left over from his old liver. Corrected, then signed.' },
+          ] } },
+      { short: 'Check outside records', task: 'Check his outside records before choosing an antibiotic.', probs: ['interop'], gov: 'interop',
+        old: { html: '<p>Media tab: "Outside records.pdf", 84 pages, scanned as one image. It cannot be searched.</p>', seq: ['Open the Media tab', 'Open the 84-page fax', 'Next page', 'Next page', 'Next page', 'Give up'], miss: 'You never reached page 31: resistant E. coli, March 2026. Today\'s antibiotic does not cover it.' },
+        part: { html: '<p>His medication history imported by itself. The 84-page fax is still a scanned image.</p>', seq: ['Open the fax', 'Next page', 'Give up'], miss: 'You never reached page 31: resistant E. coli, March 2026. Today\'s antibiotic does not cover it.' },
+        fresh: { html: '<p><b>The outside records arrived as data.</b> Resistant <i>E. coli</i>, March 2026, is flagged on the antibiotic order. A contrast dye reaction was added to his allergies.</p>', seq: ['Switch to meropenem'] } },
+      { short: "Find the kidney team's advice", task: "Find the kidney team's advice on tacrolimus.", probs: ['handoff', 'find'], gov: 'handoff',
+        old: { html: '<p>Eight consult notes, each under a different tab.</p>', answer: 4,
+          rows: ['Consults tab: Cardiology 09/26', 'Consults tab: Infectious Disease 09/27', 'Ancillary tab: Nutrition 09/27', 'Consults tab: Endocrinology 09/28', 'Consults tab: Nephrology 09/28', 'Ancillary tab: Social Work 09/28', 'Pharmacy Notes tab: Transplant Pharmacy 09/29', 'Rehab tab: Physical Therapy 09/29'] },
+        part: { html: '<p>Consult advice now sits beside the order it affects.</p>', seq: ['Open the tacrolimus order', 'Read the advice'] },
+        fresh: { html: '<p><b>Shown on the order itself.</b> Nephrology, 09/28: hold the next dose if the level is above 12. Infectious disease, 09/27: fluconazole raises tacrolimus.</p>', seq: ['Got it'] } },
+      { short: "Hold tonight's dose", task: "Hold tonight's tacrolimus dose.", probs: ['clicks'], gov: 'clicks',
+        old: { html: '<p>Order entry: tacrolimus 4 mg twice daily, next dose 21:00.</p>', seq: ['Open order', 'Modify', 'Select dose: HOLD', 'Confirm order change', 'Select a reason', 'Enter PIN', 'Sign'] },
+        fresh: { html: '<p>Tacrolimus 4 mg twice daily, next dose 21:00. Pharmacy and the bedside nurse are told when you sign.</p>', seq: ["Hold tonight's dose", 'Sign'] } },
+      { short: 'Close the chart', task: 'Close the chart.', probs: ['docburden'], gov: 'docburden',
+        old: { html: '<p>The chart will not close until the billing and quality fields are complete.</p>', seq: ['Close chart', 'Hard stop: choose level of service', 'Hard stop: quality field 1 of 7', 'Quality field 2 of 7', 'Quality field 3 of 7', 'Skip the rest: enter override reason', 'Close chart'] },
+        part: { html: '<p>Fewer hard stops. The billing level is still yours to pick.</p>', seq: ['Close chart', 'Choose level of service'] },
+        fresh: { html: '<p>The billing level and quality fields were filled in from the note.</p>', seq: ['Close chart'] } },
+      { short: 'Find the pathology result', task: 'Find his pathology result in your inbox.', probs: ['inbox', 'buried'], gov: 'inbox',
+        old: { html: '<p>In Basket: 140 unread. Nothing is marked urgent.</p>', answer: 10,
+          rows: ['Refill request: sertraline (HALVORSEN)', 'Result: routine CBC (ADEYEMI)', 'Staff message: parking validation', 'Portal message: "what is the discharge date?"', 'Coding query: clarify "acute kidney injury"', 'Cosign needed: verbal orders x6', 'Result: chest x-ray (WHITFIELD)', 'Meeting invite: EHR optimization committee', 'Result: ECG (WHITFIELD)', 'Refill request: amlodipine (OKONKWO)', 'Result: surgical pathology (WHITFIELD)', 'Portal message: "is the fever serious?"', 'Survey: rate your EHR experience', '... 127 more'] },
+        fresh: { html: '<p><b>Three urgent items on top:</b> pathology (a second tumor was found), ECG (QTc 492), chest x-ray. The other 137 went to the team pool.</p>', seq: ['Open pathology'] } },
+      { short: 'Start the discharge', task: 'Get his discharge started.', probs: ['discharge'], gov: 'discharge',
+        old: { html: '<p>Nine tasks, tracked in six different places.</p>', seq: ['Scheduling system: book clinic', 'Fax the lab standing order', 'Specialty pharmacy portal: prior authorization', 'Discharge module: BLOCKED', 'Phone home health', 'Phone transport', 'Education module', 'Phone the outside kidney clinic', 'Write it on a sticky note'] },
+        fresh: { html: '<p><b>One discharge screen.</b> Nine tasks, each with an owner and a status. The family can see it too.</p>', seq: ['Assign the open tasks'] } },
+      { short: 'Respond to the sepsis score', task: 'Decide what to do about the sepsis score.', probs: ['ai'], gov: 'ai',
+        old: { html: '<p>Sepsis risk 0.71, HIGH. Accuracy: not available. Transplant patients: not evaluated. Owner: blank. Fired 12 times today.</p>', seq: ['Look for accuracy data', 'None exists. Guess.'] },
+        part: { html: '<p>The sepsis model is switched off pending review. It has no owner yet.</p>', seq: ['Continue without it'] },
+        fresh: { html: '<p><b>Sepsis model:</b> owner Dr. Raman, 81% accurate in transplant patients, reviewed every quarter. It fired once.</p>', seq: ['Review with the team'] } },
     ],
     nurse: [
-      { problem: 'alerts', title: 'Alerts at 13:02',
-        fixed: (d) => `<div class="crit-alert">🚨 CRITICAL POTASSIUM 6.2<span>Supplement drink blocked · Physician paged · ECG ordered</span></div><p><b>${PACKAGES[d.pkg].alertsAfter} alerts</b> in three minutes, where there were 347.</p>`,
-        broken: '<p><b>347 alerts</b> in three minutes. The potassium alert still looks like "Scanner battery low."</p>' },
-      { problem: 'clicks', title: 'One insulin dose',
-        fixed: '<p>Scan the band, scan the pen, confirm. Three clicks, and the scanner reads the first time.</p>',
-        broken: '<p>Ten steps, two overrides, and a witness who is not available.</p>' },
-      { problem: 'dupes', title: 'Charting vitals',
-        fixed: '<p>Chart the 12:00 vitals once. They flow to the transplant module and the intake and output screen.</p>',
-        broken: '<p>The same six values, typed into three screens.</p>' },
-      { problem: 'buried', title: 'What was buried',
-        fixed: '<p><b class="red">Early warning score 5</b> called the physician to the bedside automatically. The 05:30 tremor note is flagged for the team.</p>',
-        broken: '<p>Early warning score 5. Nobody was called. The tremor is in a free-text note.</p>' },
-      { problem: 'docburden', title: 'Required assessments',
-        fixed: '<p>The worklist shows 5 tasks that matter this shift. Overdue reminders no longer interrupt a critical value.</p>',
-        partial: '<p>The duplicate tasks are gone. There are still 12 required items every shift.</p>',
-        broken: '<p>Fourteen tasks, two of them duplicates, one overdue reminder in the middle of an emergency.</p>' },
-      { problem: 'medrec', title: 'Conflicting orders',
-        fixed: '<p>The potassium supplement was stopped when the low-potassium diet was ordered. Lactulose is gone.</p>',
-        broken: '<p>Low-potassium diet and a potassium supplement, both active. Lactulose still due.</p>' },
-      { problem: 'handoff', title: 'Handoff',
-        fixed: '<p>The handoff screen shows one tacrolimus plan, the unanswered 05:50 page, and who owns each.</p>',
-        partial: '<p>The care plan is shared. The unanswered page still is not tracked.</p>',
-        broken: '<p>"Surgery might change the tacrolimus." No order. No callback.</p>' },
-      { problem: 'discharge', title: 'Discharge',
-        fixed: '<p>Nine discharge tasks on one screen, each with an owner. The family can see it too.</p>',
-        broken: '<p>Nine tasks in six places. The case manager\'s sticky notes are the real system.</p>' },
+      { short: 'Check the noon labs', task: 'Check the noon labs before you give anything.', probs: ['buried', 'ui'], gov: 'buried',
+        old: { html: '<p>Results: 26 components. Find the one that should stop you.</p>', rows: LAB_ROWS, answer: 1 },
+        fresh: { html: '<div class="sim-crit">Potassium 6.2 mmol/L: CRITICAL</div><p>The physician was paged at 13:02 and an ECG is ordered.</p>', seq: ['Acknowledge'] } },
+      { short: 'Give the 12:30 insulin', task: 'Give the 12:30 insulin.', probs: ['clicks'], gov: 'clicks',
+        old: { html: '<p>insulin lispro 8 units, glucose 312.</p>', seq: ['Scan patient band', 'Scan medication', 'Barcode not recognized: Override', 'Select override reason', 'Enter glucose value', 'Request second nurse', 'Witness unavailable: Bypass', 'Document injection site', 'Confirm dose', 'Sign'] },
+        fresh: { html: '<p>insulin lispro 8 units, glucose 312. The scanner reads the first time.</p>', seq: ['Scan patient band', 'Scan insulin pen', 'Confirm 8 units'] } },
+      { short: 'Decide what else is due', task: 'Decide what else is due and safe.', probs: ['medrec'], gov: 'medrec',
+        old: { html: '<p>Due at 13:00: a high-protein supplement drink (potassium 400 mg) and lactulose. A low-potassium diet order is also active.</p>', any: true,
+          rows: [{ t: 'Give the supplement drink', flag: 'supp' }, { t: 'Give the lactulose', flag: 'lact' }, { t: 'Hold both and call the physician' }] },
+        fresh: { html: '<p>The supplement was stopped when the low-potassium diet was ordered. Lactulose was discontinued after the transplant.</p>', seq: ['Nothing else is due'] } },
+      { short: 'Chart the vitals', task: 'Chart the 12:00 vital signs.', probs: ['dupes'], gov: 'dupes',
+        old: { html: '<p>Temp 37.9, HR 108, BP 156/92, RR 20, SpO2 93% on 2 L, pain 3. Three screens want them.</p>', seq: ['Type six vitals in the flowsheet', 'Save', 'Re-type them in the transplant module', 'Save', 'Re-type them in intake and output', 'Save'] },
+        fresh: { html: '<p>Temp 37.9, HR 108, BP 156/92, RR 20, SpO2 93% on 2 L, pain 3. Charted once, filed everywhere.</p>', seq: ['Chart vitals from the monitor'] } },
+      { short: 'Clear required documentation', task: 'Clear your required documentation.', probs: ['docburden'], gov: 'docburden',
+        old: { html: '<p>Fourteen tasks on the worklist. Two are duplicates. One is overdue.</p>', seq: ['Fall risk score', 'Braden skin score', 'Pain reassessment (overdue)', 'Care plan update', 'Education record', 'Hourly rounding', 'Dismiss the duplicate vitals task'] },
+        part: { html: '<p>The duplicates are gone. Three assessments are still required every shift.</p>', seq: ['Fall risk score', 'Skin score', 'Pain reassessment'] },
+        fresh: { html: '<p>The worklist shows only what changed this shift.</p>', seq: ['Confirm the 2 that changed'] } },
+      { short: 'Find the tacrolimus plan', task: "Find the plan for tonight's tacrolimus.", probs: ['handoff'], gov: 'handoff',
+        old: { html: '<p>Four places describe the plan. They do not agree.</p>', answer: 3,
+          rows: ['Surgery note: continue 4 mg twice daily', 'Night handoff: surgery "might change the tacrolimus"', 'Pharmacy: interaction review pending', 'Consults tab: Nephrology says hold if the level is above 12'] },
+        part: { html: '<p>The care plan is shared between teams.</p>', seq: ['Open the care plan', 'Read it'] },
+        fresh: { html: '<p><b>One plan, on the handoff screen:</b> hold tonight\'s tacrolimus if the level is above 12. Owner: Dr. Chen.</p>', seq: ['Acknowledge the plan'] } },
+      { short: "Read the night nurse's note", task: "Check the night nurse's note for anything urgent.", probs: ['find'], gov: 'find',
+        old: { html: '<p>A free-text shift note. Physicians rarely open these.</p>', answer: 4,
+          rows: ['Slept in short stretches', 'Pain 2 to 4 out of 10, oxycodone at 01:15', 'Glucose 198 at 02:00', 'Fall precautions in place, call light within reach', 'Patient says his hands "feel shaky" holding a cup', 'One loose stool after lactulose', 'Labs drawn 05:40, sample clotted', 'Will continue to monitor'] },
+        fresh: { html: '<p><b>Flagged from the night shift:</b> new hand tremor at 05:30, urine 26 mL per hour, page at 05:50 not answered.</p>', seq: ['Escalate to the physician'] } },
+      { short: 'Confirm home medicines', task: 'Confirm his home medicines.', probs: ['interop'], gov: 'interop',
+        old: { html: '<p>The outside pharmacy record did not transfer.</p>', seq: ['Phone his daughter', 'Wait while she reads the pill bottles', 'Type it into a free-text note'] },
+        part: { html: '<p>His pharmacy fill history imported. One item still needs checking by phone.</p>', seq: ['Check the imported history', 'Phone to confirm one item'] },
+        fresh: { html: '<p>His pharmacy fill history and outside records arrived as data. Ibuprofen is on the list.</p>', seq: ['Confirm the imported list'] } },
+      { short: 'Start the discharge', task: 'Start his discharge teaching and tasks.', probs: ['discharge'], gov: 'discharge',
+        old: { html: '<p>Nine tasks, tracked in six different places.</p>', seq: ['Education module: diabetes', 'Education module: medications', 'Phone home health', 'Phone transport', "Check the case manager's sticky notes", 'Discharge module: BLOCKED'] },
+        fresh: { html: '<p><b>One discharge screen.</b> Nine tasks, each with an owner. The family can see it too.</p>', seq: ['Open the shared discharge screen'] } },
+      { short: 'Respond to the warning scores', task: 'Respond to the early warning and sepsis scores.', probs: ['ai'], gov: 'ai',
+        old: { html: '<p>Early warning score 5. Sepsis risk 0.71, HIGH. No guidance on which to trust. Nobody was called.</p>', seq: ['Look for guidance', 'None exists. Guess.'] },
+        part: { html: '<p>The sepsis model is switched off. The early warning score still calls nobody.</p>', seq: ['Call the physician yourself'] },
+        fresh: { html: '<p>Early warning score 5 called the physician to the bedside by itself. The sepsis model has an owner and fired once.</p>', seq: ['Meet the physician at the bedside'] } },
     ],
   };
 
-  function afterEhr(side) {
-    const d = S.decision;
-    const pkg = PACKAGES[d.pkg];
-    const cov = coverage(d);
-    const status = (id) => (cov.full.has(id) ? 'fixed' : cov.partial.has(id) ? 'partial' : 'broken');
-    const tag = { fixed: 'NEW', partial: 'PARTLY', broken: 'UNCHANGED' };
-    const panel = (cls, tagText, title, body) => `<div class="after-panel ${cls}"><div class="after-tag">${tagText}</div><h4>${title}</h4>${body}</div>`;
-    const panels = AFTER[side]
-      .map((p) => {
-        let st = status(p.problem);
-        if (st === 'partial' && !p.partial) st = 'broken';
-        const body = typeof p[st] === 'function' ? p[st](d) : p[st];
-        return panel(st, tag[st], `${p.title} <small>#${PROBLEM[p.problem].n}</small>`, body);
+  const sim = { side: 'physician', after: false, i: 0, pos: 0, found: false, wrong: [], clicks: 0, done: 0, given: [], misses: [], startedAt: 0, endedAt: 0, run: '' };
+  // On the projector the facilitator can show the replay under any package, not only the one the room bought.
+  const hostSim = { pkg: null, side: 'physician' };
+  function simDeal() {
+    if (S.isHost && hostSim.pkg && hostSim.pkg !== S.decision.pkg) return { pkg: hostSim.pkg, modules: [], terms: [], dropped: [] };
+    return S.decision;
+  }
+  function simLevel(step) {
+    if (!sim.after) return 'old';
+    const cov = coverage(simDeal());
+    if (cov.full.has(step.gov) && step.fresh) return 'fresh';
+    if (cov.partial.has(step.gov) && step.part) return 'part';
+    return 'old';
+  }
+  const LEVEL_TAG = { fresh: 'NEW', part: 'PARTLY FIXED', old: 'UNCHANGED' };
+
+  function simList() {
+    return SCRIPT[sim.side]
+      .map((st, k) => {
+        const state = k < sim.i ? 'done' : k === sim.i ? 'now' : '';
+        const level = simLevel(st);
+        return `<li class="${state} ${sim.after ? level : ''}"><span class="sim-dot">${k < sim.i ? '✓' : k + 1}</span><span>${esc(st.short)}</span>${sim.after ? `<em>${LEVEL_TAG[level]}</em>` : ''}</li>`;
       })
       .join('');
-    const extra = [];
+  }
+
+  function simFinish() {
+    const secs = Math.max(1, Math.round((sim.endedAt - sim.startedAt) / 1000));
+    if (!sim.after) return `<div class="sim-card old"><h3>All ten steps done.</h3><p>Almost nobody gets here before the system goes down.</p></div>`;
+    const steps = SCRIPT[sim.side];
+    const count = (lv) => steps.filter((st) => simLevel(st) === lv).length;
+    const d = simDeal();
+    const before = !S.isHost && S.you.ehr ? S.you.ehr.steps || 0 : null;
     const bought = (id) => d.pkg === 'c' || (d.pkg === 'd' && d.modules.includes(id));
-    if (d.pkg !== 'keep') {
-      if (side === 'nurse') {
-        extra.push(bought('portal')
-          ? panel('fixed', 'NEW', 'Emily Whitfield\'s phone, 13:10', '<p>"Your father\'s potassium is high. The team is treating it now. Dr. Raman will call you within the hour."</p>')
-          : panel('broken', 'UNCHANGED', 'Emily Whitfield\'s phone', '<p>Nothing. The portal will show today\'s results in 3 days.</p>'));
-        extra.push(bought('training') || d.pkg === 'a'
-          ? panel('fixed', 'NEW', 'Go-live week', '<p>Sixteen hours of training and help on the floor. Nobody went back to paper.</p>')
-          : panel('cost', 'NEW WORK', 'Go-live week', '<p>Eight hours of training. Help desk calls tripled and two units went back to paper for a day.</p>'));
-      } else {
-        extra.push(bought('migration')
-          ? panel('fixed', 'NEW', 'Old records', '<p>Ten years of records are searchable. The 2023 contrast dye reaction surfaced when a CT was considered.</p>')
-          : d.pkg === 'a'
-            ? ''
-            : panel('broken', 'UNCHANGED', 'Old records', '<p>Anything older than 3 years is in a read-only archive. The 2023 contrast dye reaction is in there.</p>'));
-        if (d.pkg === 'd' && d.modules.includes('scribe') && !d.modules.includes('governance')) {
-          extra.push(panel('cost', 'SWITCHED OFF', 'AI scribe', '<p>Compliance shut the scribe down after 2 months: no governance, no AI. A $7M module sits idle.</p>'));
-        }
-      }
-    }
-    const when = d.pkg === 'keep' ? 'Nothing was installed' : `${esc(pkg.name)} is live`;
-    const fixedN = cov.full.size;
+    const also = d.pkg === 'keep' ? '' : `<ul class="sim-also">${['portal', 'migration', 'training'].map((id) => `<li class="${bought(id) ? 'yes' : 'no'}">${bought(id) ? '✓' : '✗'} ${esc(bought(id) ? MODULE[id].bought : MODULE[id].not)}</li>`).join('')}</ul>`;
     return `
-      <div class="after">
-        <div class="ehr-task"><div><b>13:02 on 6 West, replayed.</b> ${when}. ${S.you.role === side ? `Same task as before: ${side === 'physician' ? 'find today\'s tacrolimus level and decide tonight\'s dose.' : 'give the 12:30 insulin and chart the 12:00 vitals.'}` : `Try the ${side}'s task in the new system and watch for your own concern.`}</div><div class="ehr-task-timer" data-timer></div></div>
-        <div class="after-window">
-          <div class="after-head">${d.pkg === 'keep' ? 'MedCore Legacy 9.4.1, no changes' : `${esc(pkg.seller)} · ${esc(pkg.name)}${d.pkg === 'd' && d.modules.length ? ` + ${d.modules.length} module${d.modules.length === 1 ? '' : 's'}` : ''}`}
-            <span class="after-score">${fixedN} of 15 problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}</span></div>
-          <div class="after-banner ${cov.full.has('alerts') ? 'safe' : ''}">
-            <b>James Whitfield, 61</b> · liver transplant, day 6 ·
-            ${cov.full.has('buried') ? '<b class="allergy-flag">CRITICAL: potassium 6.2 · tacrolimus 19.4</b>' : 'Results: 26 components (see table)'}
+      <div class="sim-card fresh sim-finish">
+        <h3>${ic('circle-check')} All ten steps done in ${secs} seconds and ${sim.clicks} clicks.</h3>
+        ${before !== null ? `<p>In the old system you finished <b>${before} of 10</b> before it crashed.</p>` : ''}
+        <p>Of the ten steps: <b>${count('fresh')}</b> new, <b>${count('part')}</b> partly fixed, <b>${count('old')}</b> unchanged.</p>
+        ${sim.given.includes('signed_blind') ? `<p class="sim-miss">${ic('alert-triangle')} You signed the AI scribe's note without reading it. It kept him on lactulose, a drug he has not needed since the transplant. The note is yours now, not the AI's.</p>` : ''}
+        ${sim.given.includes('caught') ? `<p class="sim-good">${ic('circle-check')} You read the AI scribe's draft and caught its error: it had kept him on lactulose, a drug he no longer needs.</p>` : ''}
+        ${sim.misses.map((m) => `<p class="sim-miss">${ic('alert-triangle')} ${esc(m)}</p>`).join('')}
+        ${also}
+      </div>`;
+  }
+
+  function simStage() {
+    const steps = SCRIPT[sim.side];
+    if (sim.i >= steps.length) return simFinish();
+    const step = steps[sim.i];
+    const level = simLevel(step);
+    const v = step[level];
+    const picking = !!v.rows && !sim.found;
+    const rows = v.rows
+      ? `<div class="sim-rows">${v.rows
+          .map((r, i) => `<button class="sim-row ${sim.wrong.includes(i) ? 'no' : ''}" data-act="simrow" data-i="${i}">${esc(typeof r === 'string' ? r : r.t)}</button>`)
+          .join('')}</div>`
+      : '';
+    const seq = v.seq || [];
+    const btn = !picking && sim.pos < seq.length
+      ? `<div class="sim-seq">${seq.length > 1 ? `<small>click ${sim.pos + 1} of ${seq.length}</small>` : ''}<button class="sim-btn" data-act="simnext">${esc(seq[sim.pos])}</button></div>`
+      : '';
+    return `
+      <div class="sim-card ${level === 'old' ? 'old' : 'fresh'}">
+        <div class="sim-q"><span>Step ${sim.i + 1} of ${steps.length}</span>${sim.after ? `<span class="sim-tag ${level}">${LEVEL_TAG[level]}</span>` : ''}</div>
+        <h3>${esc(step.task)}</h3>
+        ${v.html || ''}
+        ${picking ? `<p class="sim-hint">${v.any ? 'Choose one.' : 'Click the right line.'}</p>` : ''}
+        ${rows}${btn}
+      </div>`;
+  }
+
+  function renderSim() {
+    const list = document.querySelector('[data-simsteps]');
+    const stage = document.querySelector('[data-simstage]');
+    if (!list || !stage) return;
+    list.innerHTML = simList();
+    stage.innerHTML = iconize(simStage());
+    const bar = document.querySelector('[data-simprogress]');
+    if (bar) bar.textContent = `${sim.done} of ${SCRIPT[sim.side].length} steps done · ${sim.clicks} clicks`;
+  }
+
+  function simAdvance(v) {
+    if (v.miss) sim.misses.push(v.miss);
+    sim.done++;
+    sim.i++;
+    sim.pos = 0;
+    sim.found = false;
+    sim.wrong = [];
+    if (sim.i >= SCRIPT[sim.side].length) sim.endedAt = Date.now();
+    if (!sim.after) ehrReport({ steps: sim.done, given: sim.given }, true);
+  }
+
+  function simClick(kind, index) {
+    if (ehr.crashed || ehr.current) return;
+    const step = SCRIPT[sim.side][sim.i];
+    if (!step) return;
+    const v = step[simLevel(step)];
+    sim.clicks++;
+    if (kind === 'row') {
+      if (!v.rows || sim.found) return;
+      const row = v.rows[index];
+      if (v.any || index === v.answer) {
+        sim.found = true;
+        if (row && row.flag) sim.given.push(row.flag);
+        if (row && row.say) toast(row.say);
+      } else if (!sim.wrong.includes(index)) sim.wrong.push(index);
+    } else if (!(v.rows && !sim.found)) sim.pos++;
+    if ((!v.rows || sim.found) && sim.pos >= (v.seq || []).length) simAdvance(v);
+    renderSim();
+  }
+
+  // A system with working alerts interrupts once, with the one thing that matters.
+  function simShowAlert(side) {
+    const layer = document.getElementById('ehr-alert');
+    if (!layer || ehr.crashed) return;
+    layer.innerHTML = iconize(`
+      <div class="after-alert"><div class="after-alert-head">${ic('urgent')} Critical · ${side === 'physician' ? 'tacrolimus 19.4' : 'potassium 6.2'}</div>
+        <p>${side === 'physician' ? 'Fluconazole and diltiazem are raising the level. Potassium is 6.2. Nephrology advised holding above 12.' : 'The potassium supplement is blocked. The physician has been paged and an ECG is ordered.'}</p>
+        <p class="after-quiet">This is the only interruption. ${Math.max(0, PACKAGES[simDeal().pkg].alertsAfter - 1)} routine reminders are waiting in a quiet list.</p>
+        <button class="abtn primary" data-act="simalert">Acknowledge</button></div>`);
+    layer.classList.add('show');
+  }
+
+  function startSim(side, after) {
+    ehrStop();
+    ehr.crashed = false;
+    ehr.current = null;
+    const run = `${side}:${after ? simDeal().pkg : 'before'}:${Date.now()}`;
+    Object.assign(sim, { side, after, i: 0, pos: 0, found: false, wrong: [], clicks: 0, done: 0, given: [], misses: [], startedAt: Date.now(), endedAt: 0, run });
+    renderSim();
+    if (!after) return ehrStart(ALERTS[side], true, CRASH_AT);
+    if (coverage(simDeal()).full.has('alerts')) {
+      setTimeout(() => S && S.step === 'p6_sim' && sim.run === run && simShowAlert(side), 2500);
+    } else {
+      // Nothing fixed the alerting, so the storm and the crash happen again.
+      ehrStart(ALERTS[side].map((a) => ({ ...a, crit: false })), false, CRASH_AT);
+    }
+  }
+
+  // The simulation screen. Before the vote it is always the old system; afterwards the frame and every step follow the deal.
+  function simScreen(side, after) {
+    const deal = after ? simDeal() : null;
+    const modern = after && ['b', 'c', 'd'].includes(deal.pkg);
+    const mine = !S.isHost && S.you.role === side;
+    const cov = after ? coverage(deal) : null;
+    const who = S.isHost ? `The ${side}'s ten steps` : mine ? (after ? 'The same ten steps as before' : 'Ten steps. One minute.') : `You are watching the ${side}'s ten steps. ${after ? '' : esc(ROLES[S.you.role].observe)}`;
+    const title = !after
+      ? 'MedCore Legacy 9.4.1'
+      : deal.pkg === 'keep'
+        ? 'MedCore Legacy 9.4.1, no changes'
+        : `${PACKAGES[deal.pkg].seller} · ${PACKAGES[deal.pkg].name}${deal.pkg === 'd' && deal.modules.length ? ` + ${deal.modules.length} module${deal.modules.length === 1 ? '' : 's'}` : ''}`;
+    const banner = `<b>WHITFIELD, JAMES R</b> · 61 · liver transplant, day 6 · bed 6W-14 · 13:02`;
+    return `
+      <div class="ehr simwrap">
+        <div class="ehr-task">
+          <div><b>13:02 on 6 West${after ? ', replayed' : ''}.</b> ${who} <span class="sim-progress" data-simprogress></span></div>
+          <div class="ehr-task-timer" data-timer></div>
+        </div>
+        <div class="${modern ? 'after-window' : 'ehr-window'} simwin">
+          ${modern
+            ? `<div class="after-head">${esc(title)}<span class="after-score">${cov.full.size} of 15 problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}</span></div><div class="after-banner">${banner}</div>`
+            : `<div class="ehr-titlebar">${esc(title)} · RIVERBEND UNIV HOSP · PRD<span class="ehr-lagtag"> (Not Responding)</span></div>
+               <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Quality</span><span>Help</span></div>
+               <div class="ehr-banner">${banner} | MRN RUH-4471902 | Attending: Raman, P MD | Allergies/Intolerances: 1 active (see Allergy activity) | Isolation: PROTECTIVE | Sepsis Risk: 0.71 HIGH | In Basket: 140 unread | Outside records: 1 new (Media)${after && cov ? ` | ${cov.full.size} of 15 problems fixed` : ''}</div>`}
+          <div class="sim-body ${modern ? 'modern' : ''}">
+            <ol class="sim-steps" data-simsteps></ol>
+            <div class="sim-stage" data-simstage></div>
           </div>
-          <div class="after-try"><div class="after-try-head">TRY IT ${cov.full.has('alerts') ? `<span>${Math.max(0, pkg.alertsAfter - 1)} routine reminders are waiting in a quiet list, not on your screen</span>` : ''}</div><div data-afterwork="${side}"></div></div>
-          <div class="after-try-head sub">WHAT CHANGED, AND WHAT DID NOT</div>
-          <div class="after-grid">${panels}${extra.join('')}</div>
+          ${modern ? '' : '<div class="ehr-status">Ready | 212 notes | 26 results | 22 orders | 8 consults | Lab interface: RETRYING | CAPS</div>'}
           <div id="ehr-alert" class="ehr-alert"></div>
         </div>
       </div>`;
   }
 
-
-  // ---------- Phase 6 replay: the same two tasks, playable in the system the room bought ----------
-  // How many clicks each task takes, what is blocked, and what is still broken all follow the deal's coverage.
-
-  const aft = { clicks: 0, dose: null, signed: false, stopped: false, mar: {}, vitals: 0, alert: false };
-  const aftFixed = (id) => coverage(S.decision).full.has(id);
-  const aftPartly = (id) => coverage(S.decision).partial.has(id);
-
-  function aftMar() {
-    const rows = [{ id: 'insulin', text: 'insulin lispro 8 units (glucose 312)', due: '12:30', steps: aftFixed('clicks') ? ['Scan patient band', 'Scan insulin pen', 'Confirm 8 units'] : MAR[0].steps }];
-    const supp = { id: 'supp', text: 'High-protein supplement (potassium 400 mg)', due: '13:00' };
-    if (aftFixed('medrec')) rows.push({ ...supp, blocked: 'Stopped when the low-potassium diet was ordered' });
-    else if (aftFixed('alerts')) rows.push({ ...supp, blocked: 'Blocked: potassium 6.2. Physician paged.' });
-    else rows.push({ ...supp, steps: ['Scan', 'Document'] });
-    if (aftFixed('medrec')) rows.push({ id: 'lact', text: 'lactulose 30 mL', due: '13:00', blocked: 'Discontinued: not needed after transplant' });
-    else rows.push({ id: 'lact', text: 'lactulose 30 mL', due: '13:00', steps: ['Scan', 'Barcode not recognized: Override', 'Document'] });
-    rows.push({ id: 'mag', text: 'magnesium oxide 400 mg', due: '13:00', steps: ['Scan', 'Document'] });
-    return rows;
-  }
-  const aftVitalSteps = () => (aftFixed('dupes') ? ['Chart 12:00 vitals from the monitor'] : ['Save in the flowsheet', 'Re-enter in the transplant module', 'Re-enter in intake and output']);
-  const aftDoseSteps = () => (aftFixed('clicks') ? ['Sign'] : DOSE_STEPS);
-  const abtn = (k, v, label, cls) => `<button class="abtn ${cls || ''}" data-act="aft" data-k="${k}" data-v="${v}">${esc(label)}</button>`;
-
-  function aftPhysician() {
-    const modern = aftFixed('clicks');
-    const results = aftFixed('buried')
-      ? `<div class="after-crit"><b>Tacrolimus 19.4 ng/mL</b> CRITICAL · target 8 to 12</div>
-         <div class="after-crit"><b>Potassium 6.2 mmol/L</b> CRITICAL</div>
-         <p>Creatinine 2.4 (was 1.6 yesterday). Paged to Dr. Raman at 13:02.</p>
-         <p class="after-quiet">23 other results are normal or unchanged. Show all</p>`
-      : `<div class="after-scroll">${labsTable()}</div><p class="after-quiet">Find the tacrolimus level yourself. It is in there.</p>`;
-    let order;
-    if (aft.signed) {
-      order = aft.dose.choice === 'hold'
-        ? `<p class="after-ok">${ic('circle-check')} Signed: tonight's dose is on hold. ${aftFixed('handoff') || aftPartly('handoff') ? 'Pharmacy and the bedside nurse were notified.' : 'Nobody else was notified.'}</p>`
-        : `<p class="after-bad">${ic('alert-triangle')} Signed: ${DOSE_LABEL[aft.dose.choice].toLowerCase()} at a level of 19.4.</p>`;
-    } else if (aft.dose) {
-      const steps = aftDoseSteps();
-      order = `<p>${DOSE_LABEL[aft.dose.choice]} · step ${aft.dose.step + 2} of ${steps.length + 1}</p>${abtn('dose', aft.dose.choice, steps[aft.dose.step], modern ? 'primary' : '')}`;
-    } else {
-      order = `${aft.stopped ? `<p class="after-bad">${ic('hand-stop')} Stopped: the level is 19.4, above the hold threshold. Choose again.</p>` : ''}
-        ${abtn('dose', 'hold', 'Hold tonight\'s dose', modern ? 'primary' : '')} ${abtn('dose', 'reduce', 'Reduce to 2 mg')} ${abtn('dose', 'continue', 'Continue 4 mg')}`;
-    }
-    const advice = aftFixed('handoff') || aftPartly('handoff')
-      ? '<p class="after-note"><b>Nephrology, 09/28:</b> hold the next dose if the level is above 12.<br><b>Infectious disease, 09/27:</b> fluconazole raises tacrolimus.</p>'
-      : '<p class="after-quiet">Consult advice: open each of 8 tabs to read.</p>';
-    return `
-      <div class="after-card ${aftFixed('buried') ? '' : 'old'}"><h4>1. Today's results</h4>${results}</div>
-      <div class="after-card ${modern ? '' : 'old'}"><h4>2. Tacrolimus 4 mg twice daily · next dose 21:00</h4>${advice}<div class="after-actions">${order}</div></div>`;
-  }
-
-  function aftNurse() {
-    const modern = aftFixed('clicks');
-    const cell = (m) => {
-      if (m.blocked) return `<span class="after-blocked">${ic('ban')} ${esc(m.blocked)}</span>`;
-      const done = aft.mar[m.id] || 0;
-      if (done >= m.steps.length) return `<span class="after-ok">${ic('circle-check')} Given 13:03${m.id === 'supp' ? ' <b class="after-bad">at a potassium of 6.2</b>' : ''}</span>`;
-      return `${done ? `<small>step ${done + 1} of ${m.steps.length}</small> ` : ''}${abtn('mar', m.id, m.steps[done], modern && m.id === 'insulin' ? 'primary' : '')}`;
-    };
-    const vs = aftVitalSteps();
-    const vitals = aft.vitals >= vs.length
-      ? `<p class="after-ok">${ic('circle-check')} ${aftFixed('dupes') ? 'Charted once. Filed in the transplant module and intake and output too.' : 'Charted. The same six values, typed three times.'}</p>`
-      : `<p>Temp 37.9 · HR 108 · BP 156/92 · RR 20 · SpO2 93% on 2 L · Pain 3</p>${vs.length > 1 ? `<small>screen ${aft.vitals + 1} of ${vs.length}</small> ` : ''}${abtn('vitals', '1', vs[aft.vitals], modern ? 'primary' : '')}`;
-    return `
-      <div class="after-card ${modern ? '' : 'old'}"><h4>1. Medications due now</h4>
-        <table class="after-mar">${aftMar().map((m) => `<tr><td>${esc(m.text)}</td><td>${m.due}</td><td>${cell(m)}</td></tr>`).join('')}</table></div>
-      <div class="after-card ${aftFixed('dupes') ? '' : 'old'}"><h4>2. 12:00 vital signs</h4><div class="after-actions">${vitals}</div></div>`;
-  }
-
-  function aftDone(side) {
-    const insulin = aftMar()[0];
-    const done = side === 'physician' ? aft.signed : (aft.mar.insulin || 0) >= insulin.steps.length && aft.vitals >= aftVitalSteps().length;
-    if (!done) return `<div class="after-count">Clicks so far: <b>${aft.clicks}</b></div>`;
-    const before = side === 'physician' ? 'Before: 4 clicks, after finding one value among 26 rows, if you got there before the crash.' : 'Before: 13 clicks across three screens, if you got there before the crash.';
-    return `<div class="after-count done">${ic('circle-check')} Task done in <b>${aft.clicks} click${aft.clicks === 1 ? '' : 's'}</b>. ${before}</div>`;
-  }
-
-  function renderAfter() {
-    const el = document.querySelector('[data-afterwork]');
-    if (!el) return;
-    const side = el.dataset.afterwork;
-    el.innerHTML = iconize(`<div class="after-work">${side === 'physician' ? aftPhysician() : aftNurse()}</div>${aftDone(side)}`);
-  }
-
-  // A system with working alerts interrupts once, with the one thing that matters and a way to act on it.
-  function aftShowAlert(side) {
-    const layer = document.getElementById('ehr-alert');
-    if (!layer || aft.alert || ehr.crashed) return;
-    aft.alert = true;
-    layer.innerHTML = iconize(side === 'physician'
-      ? `<div class="after-alert"><div class="after-alert-head">${ic('urgent')} Critical · needs a decision</div>
-           <p><b>Tacrolimus 19.4</b> (target 8 to 12). Fluconazole and diltiazem are raising the level. <b>Potassium 6.2.</b></p>
-           <p class="after-quiet">Dr. Raman was paged at 13:02. Nephrology advised holding above 12.</p>
-           ${abtn('alert', 'hold', 'Hold tonight\'s dose', 'primary')} ${abtn('alert', 'open', 'Open the order')}</div>`
-      : `<div class="after-alert"><div class="after-alert-head">${ic('urgent')} Critical · potassium 6.2</div>
-           <p>The potassium supplement is <b>blocked</b>. The physician has been paged and an ECG is ordered.</p>
-           <p class="after-quiet">Insulin is still due. Stay with the patient.</p>
-           ${abtn('alert', 'ack', 'Acknowledge', 'primary')}</div>`);
-    layer.classList.add('show');
-  }
-
-  function aftClick(k, v) {
-    if (ehr.crashed) return;
-    aft.clicks++;
-    if (k === 'alert') {
-      const layer = document.getElementById('ehr-alert');
-      if (layer) layer.classList.remove('show');
-      if (v === 'hold') {
-        aft.dose = { choice: 'hold', step: aftDoseSteps().length };
-        aft.signed = true;
-      }
-    } else if (k === 'dose') {
-      if (!aft.dose) {
-        // With working alerts the system refuses another dose at a toxic level.
-        if (v !== 'hold' && aftFixed('alerts')) aft.stopped = true;
-        else aft.dose = { choice: v, step: 0 };
-      } else if (++aft.dose.step >= aftDoseSteps().length) aft.signed = true;
-    } else if (k === 'mar') {
-      aft.mar[v] = (aft.mar[v] || 0) + 1;
-    } else if (k === 'vitals') {
-      aft.vitals++;
-    }
-    renderAfter();
+  // For the reveal: the ten steps and what each one was hiding.
+  function stepMap(side, reached) {
+    return `<div class="stepmap"><div class="eyebrow">THE TEN ${side.toUpperCase()} STEPS, AND WHAT EACH ONE WAS HIDING</div>${SCRIPT[side]
+      .map((st, k) => `<div class="stepmap-row ${k < reached ? 'got' : ''}"><span class="sim-dot">${k < reached ? '✓' : k + 1}</span><span>${esc(st.short)}</span><span class="stepmap-probs">${st.probs.map((id) => `<span class="pchip">${PROBLEM[id].n}. ${esc(PROBLEM[id].label)}</span>`).join('')}</span></div>`)
+      .join('')}</div>`;
   }
 
   // ---------- money and outcomes ----------
@@ -1009,7 +752,6 @@
   const inTier = (tier) => byRank().filter((p) => S.problems[p.id].tier === tier.k);
   const isShared = (id) => S.shared.some((s) => s.id === id);
   const termOffered = (t) => !t.gate || isShared(t.gate);
-  const revealedB = () => isShared('it_bhidden');
 
   function scorecard(deal) {
     const cov = coverage(deal);
@@ -1026,26 +768,31 @@
   }
 
   function dealBox(d) {
-    if (d.pkg === 'keep') return '<div class="deal"><div><small>TRUE COST</small><b>$0</b></div><div><small>STATUS QUO</small><b>$4.2M / year</b></div><div><small>GO-LIVE</small><b>never</b></div></div>';
+    if (d.pkg === 'keep') return '<div class="deal"><div><small>CONTRACT</small><b>$0</b></div><div><small>STATUS QUO</small><b>$4.2M / year</b></div><div><small>GO-LIVE</small><b>never</b></div></div>';
     const c = dealCost(d);
     const pkg = PACKAGES[d.pkg];
     const golive = d.pkg === 'd' && d.terms.includes('march') ? 'March 2028' : pkg.golive;
     return `
       <div class="deal">
-        <div><small>PRICE${c.discount ? ' AFTER 8% OFF' : ''}${c.modules ? ' + MODULES' : ''}</small><b>${money(c.price + c.modules + c.extras)}</b></div>
-        <div class="${c.over ? 'over' : 'under'}"><small>TRUE 5-YEAR COST vs ${money(c.cap)} CAP</small><b>${money(c.total)}</b></div>
+        <div class="${c.over ? 'over' : 'under'}"><small>CONTRACT vs ${money(c.cap)} BUDGET</small><b>${money(c.total)}</b></div>
+        <div><small>ARRIVES AFTER SIGNING</small><b>+${money(c.after)}</b></div>
         <div><small>GO-LIVE</small><b>${esc(golive)}</b></div>
       </div>`;
   }
 
-  // Costs nobody put on the package sheet. They land after signing unless a team raised them in time.
+  // Costs that were never on the vendor's sheet. They land after signing; a team that published them saw them coming.
   function surprises(d) {
-    if (d.pkg === 'keep' || d.pkg === 'a') return [];
+    if (d.pkg === 'keep') return [];
+    const pkg = PACKAGES[d.pkg];
     const out = [];
-    if (d.pkg === 'b') out.push(revealedB() ? 'IT warned the room about $5M of servers and contractors. It was real.' : '$5M of servers and contractors that were never on the package sheet.');
-    if (!d.terms.includes('medcorefee')) out.push(TERM.medcorefee.missing);
-    if (!d.terms.includes('exitfee')) out.push(TERM.exitfee.missing);
-    if (PACKAGES[d.pkg].lost > RESERVE) out.push(`Lost revenue of ${money(PACKAGES[d.pkg].lost)} was above the ${money(RESERVE)} cash reserve. The hospital borrowed.`);
+    const known = isShared('fi_after');
+    if (pkg.lost + pkg.old > 0) out.push(`${money(pkg.lost)} of lost revenue at go-live${pkg.old ? ` and ${money(pkg.old)} to keep the old system running during the switch` : ''}. ${known ? 'Finance had warned the room.' : 'Finance knew. Nobody asked.'}`);
+    if (pkg.lost > RESERVE) out.push(`Lost revenue was above the ${money(RESERVE)} cash reserve, so the hospital borrowed.`);
+    if (pkg.hidden) out.push(isShared('it_bhidden') ? `IT warned the room about ${money(pkg.hidden)} of servers and contractors. It was real.` : `${money(pkg.hidden)} of servers and contractors that IT knew about and nobody put on the table.`);
+    if (d.pkg === 'c' || d.pkg === 'd') {
+      if (!d.terms.includes('medcorefee')) out.push(TERM.medcorefee.missing);
+      if (!d.terms.includes('exitfee')) out.push(TERM.exitfee.missing);
+    }
     return out;
   }
 
@@ -1067,7 +814,7 @@
     }
     if (role === 'finance' && d.pkg !== 'keep') {
       const c = dealCost(d);
-      (c.over ? bad : lines).unshift(`True cost ${money(c.total)} against a ${money(c.cap)} cap${c.over ? `: ${money(c.total - c.cap)} over. The board made you find it elsewhere.` : '.'}`);
+      (c.over ? bad : lines).unshift(`Contract ${money(c.total)} against a ${money(c.cap)} budget${c.over ? `: ${money(c.total - c.cap)} over. The board made you find it elsewhere.` : `, with ${money(c.after)} more arriving after signing.`}`);
     }
     if (role === 'exec' && d.byExec) lines.unshift('No deal reached the votes it needed, so you decided. Every group that lost knows who to blame.');
     if (role === 'patients' && d.pkg === 'd' && !d.modules.includes('portal') && !d.modules.includes('discharge')) bad.unshift('Nothing in the deal was built for patients. You were told "phase two."');
@@ -1091,7 +838,7 @@
     return `
       <div class="rolecard">
         <div class="rolecard-head"><span class="rolecard-icon">${r.icon}</span> ${r.name}</div>
-        <p class="muted small">${esc(r.who)} · ${g.votes ? `${g.votes} of ${TOTAL_VOTES} votes${r.group === 'clinical' ? ', shared by nurses and physicians' : ''}` : 'no vote, but you set the prices'}</p>
+        <p class="muted small">${esc(r.who)} · ${g.votes ? `${g.votes} of ${TOTAL_VOTES} votes${r.group === 'clinical' ? ', shared by nurses and physicians' : ''}` : 'no vote, but you set your own prices'}</p>
         <div class="eyebrow">YOUR GOAL</div>
         <p class="rolecard-priority">${esc(r.goal)}</p>
         <div class="eyebrow">SAY THIS OUT LOUD</div>
@@ -1124,7 +871,7 @@
             return `<div class="sec ${shared ? 'shared' : ''}"><span>${offer ? '🤝 ' : ''}${esc(sec.text)}</span>${btn}</div>`;
           })
           .join('')}
-        <p class="muted small">${key === 'vendor' ? 'An offer you put on the table appears on every ballot. You cannot take it back.' : 'Only your team sees these. Publishing one puts it on the big screen for everyone. You cannot take it back.'}</p>
+        <p class="muted small">${r.group === 'vendor' ? 'An offer you put on the table appears on every ballot, and your rival sees it too. You cannot take it back.' : 'Only your team sees these. Publishing one puts it on the big screen for everyone. You cannot take it back.'}</p>
       </div>`;
   }
 
@@ -1146,7 +893,7 @@
     let lines = [];
     switch (S.step) {
       case 'p1_intro':
-        lines = clin ? ['You use the EHR. Do the task you are given.', 'Notice everything that gets in your way.'] : [`You watch the ${r.side} screen. Do not help them.`, r.observe];
+        lines = clin ? ['You have one minute and ten steps. Get as far as you can.', 'Notice everything that gets in your way.'] : [`You watch the ${r.side} screen. Do not help them.`, r.observe];
         break;
       case 'p2_notes':
         lines = vendor ? ['Work alone and in silence.', 'Tick every problem you could sell a fix for.'] : ['Work alone. No talking yet.', 'Tick every problem you hit or saw.', clin ? '' : `Remember your watching task: ${r.observe}`];
@@ -1167,16 +914,16 @@
         lines = vendor ? ['Listen to the hospital\'s list.', 'Your pitch cards are below. One minute per package is coming.'] : [`${spokesperson() || 'Your spokesperson'} presents the list for two minutes.`, 'Everyone else: stay quiet and watch the vendors react.'];
         break;
       case 'p3_pitch':
-        lines = vendor ? ['Pitch the highlighted package for one minute, then hand over.', 'Follow the cue card: three fixes, price and date, one honest gap.'] : ['Listen. Questions wait until Phase 4.', ...r.ask.map((q) => `Hold this question: ${q}`)];
+        lines = vendor ? ['You pitch your two packages, one minute each. Your rival pitches the other two.', 'Follow the cue card: three fixes, price and date, one honest gap.'] : ['Listen. Questions wait until Phase 4.', ...r.ask.map((q) => `Hold this question: ${q}`)];
         break;
       case 'p4_intra':
         lines = vendor
-          ? ['Inside your team: decide which offers to put on the table, and for whom.', 'An offer you publish appears on every ballot.']
+          ? ['Inside your team: decide which offers to put on the table, and for whom.', 'An offer you publish appears on every ballot. Your rival vendor is planning the same thing.']
           : ['Inside your team only. Do not visit other tables yet.', 'Agree your must-haves, what you will trade, and your red line.', 'Set your position below. It is a straw vote and can change.'];
         break;
       case 'p4_inter':
         lines = vendor
-          ? ['Visit every table. Find out who needs what.', 'Put an offer on the table when it wins you a vote.']
+          ? ['Visit every table. Find out who needs what, and what your rival has offered them.', 'Put an offer on the table when it wins you a vote.']
           : [`Go to other tables. A deal needs ${PASS} of ${TOTAL_VOTES} votes.`, 'Publish one of your private facts when it helps your case.', 'Update your position as deals form.'];
         break;
       case 'p5_vote':
@@ -1198,13 +945,13 @@
     const c = dealCost({ pkg: id });
     return `
       <div class="cue p${id}">
-        <div class="cue-head"><span class="pkg-letter p${id}">${pkg.letter}</span> ${pkg.name} <small>${id === 'a' ? 'pitched by the MedCore representative' : 'pitched by Northwind'}</small></div>
+        <div class="cue-head"><span class="pkg-letter p${id}">${pkg.letter}</span> ${pkg.name} <small>pitched by ${esc(pkg.seller)}</small></div>
         <ol>
           <li><b>"It fixes</b> ${top.length ? top.map((p) => esc(p.label.toLowerCase())).join(', ') : 'your alert problem'}<b>."</b> <span class="muted small">(the top problems on their list that this package covers)</span></li>
-          <li><b>"It costs ${money(pkg.price)}</b>${id === 'd' ? ' for the core, plus the modules you choose' : ''}<b>, and goes live ${esc(pkg.golive)}."</b> <span class="muted small">True cost ${money(c.total)}.</span></li>
+          <li><b>"It costs ${money(pkg.price)}</b>${id === 'd' ? ' for the core, plus the modules you choose' : ''}<b>, and goes live ${esc(pkg.golive)}."</b> <span class="muted small">Your angle: ${esc(pkg.frame.toLowerCase())}. ${esc(pkg.stance)}</span></li>
           <li><b>"What it does not do:</b> ${esc(pkg.leaves)}<b>"</b></li>
         </ol>
-        <p class="muted small">Private: ${esc(ROLES.vendor.brief[id])}</p>
+        <p class="muted small">Private: ${esc(ROLES[SELLERS[pkg.seller]].brief[id])}</p>
       </div>`;
   }
 
@@ -1212,7 +959,7 @@
     <div class="missed">
       <div class="eyebrow dark">${side === 'physician' ? 'ON THE PHYSICIAN SCREEN' : 'ON THE NURSE SCREEN'}</div>
       <div class="missed-row">${SIM[side].missed}</div>
-      <div class="small">Advisory #${critNumber(side)} of ${ALERTS[side].length}. It looked exactly like "${SIM[side].lookalike}."</div>
+      <div class="small">Advisory #${critNumber(side)} of ${ALERTS[side].length} in under a minute. It looked exactly like "${SIM[side].lookalike}."</div>
       <div class="small">${SIM[side].truth}</div>
     </div>`;
 
@@ -1236,7 +983,7 @@
     <details class="recall"><summary>📦 Reference: packages, modules, costs, coverage</summary>
       <h3>The four packages</h3><div data-dyn="packages"></div>
       <h3>Module menu for Package D</h3><div data-dyn="menu"></div>
-      <h3>True five-year cost</h3><div data-dyn="costs"></div>
+      <h3>Price against the budget</h3><div data-dyn="costs"></div>
       <h3>Which problems each package fixes</h3><div data-dyn="matrix"></div>
     </details>`;
 
@@ -1244,17 +991,17 @@
   const PROCEDURE = {
     lobby: ['Share the address and the room code.', 'Wait for seats to fill, or press Randomize.', 'Press Begin when every group has someone.'],
     p1_intro: ['Read the two tasks aloud.', 'Remind the room: no talking.', 'Press Start the simulation.'],
-    p1_ehr: ['Say nothing. Let the alerts build.', 'The screen moves on by itself after the crash.'],
+    p1_ehr: ['Say nothing. Let the alerts build.', 'The system crashes at 54 seconds and the screen moves on by itself.'],
     p2_notes: ['Read out the two alerts that were missed.', 'Everyone ticks problems alone, in silence.', 'Press Next at zero.'],
     p2_merge: ['Ask the room: "What stopped you from doing your job?"', 'Each person stars 3 problems for their group.', 'Vendors listen and do not speak.'],
     p2_top3: ['Ask what belongs in Must fix.', 'Drag cards between columns as the room decides.', 'Confirm the spokesperson, then press Next.'],
     p3_hospital: ['Invite the spokesperson to present for two minutes.', 'Vendors stay silent and prepare.', 'Press Next to start the pitches.'],
-    p3_pitch: ['One minute per package: A, B, C, D.', 'Call time when the pitch timer reaches zero.', 'Hold all questions for Phase 4.'],
+    p3_pitch: ['MedCore pitches A then B. Northwind pitches C then D. One minute each.', 'Call time when the pitch timer reaches zero.', 'Hold all questions for Phase 4.'],
     p4_intra: ['Teams stay at their own tables.', 'Each person sets a position on their device.', 'Remind teams that they hold private facts.'],
     p4_inter: ['Send people to other tables. Vendors visit everyone.', 'Watch the board: a deal needs 5 of 7 votes.', 'With two minutes left, ask the executives to announce the ballot.'],
     p5_vote: ['Call each group for its vote and one reason.', 'Wait for the count to finish.', 'Press Next to reveal the result.'],
     p6_decision: ['Ask the CEO to announce the decision to the vendors.', 'Ask the vendors: accept or refuse?', 'Press Next for the replay.'],
-    p6_sim: ['Players redo the same task in the new system on their devices.', 'Ask: how many clicks did it take this time?', 'Ask: what is still broken?'],
+    p6_sim: ['Players redo the same ten steps in the new system on their own devices.', 'Click through the steps on this screen for the room.', 'Use the System buttons to compare with what was not bought.'],
     p6_outcome: ['Read the headline and the patient line.', 'Ask one group to read its outcome card.', 'Press Next for the feedback form.'],
     p6_reflect: ['Give everyone one minute.', 'Download the feedback CSV before closing the game.'],
     debrief: ['Take the four questions in order.', 'Ask which published fact changed the room.'],
@@ -1284,7 +1031,7 @@
               <div class="roomcode">${esc(S.code)}</div>
               <div data-dyn="lobbyhost"></div>
               <p><button class="btn" data-act="shuffle">🎲 RANDOMIZE EVERYONE BY THE SEAT PLAN</button></p>
-              <p class="muted small">Seat plan from the facilitator pack: executives 3 to 5, finance 3 to 5, clinical 8 to 12, IT 3 to 5, compliance 3 to 4, patients 2 to 4, vendors 3 to 5.</p>
+              <p class="muted small">Seat plan: executives 3 to 5, finance 3 to 5, clinical 8 to 12, IT 3 to 5, compliance 3 to 4, patients 2 to 4, and two competing vendors with 2 to 3 each.</p>
             </div>`;
         }
         return `
@@ -1310,7 +1057,7 @@
                 <div class="taskcard"><div class="eyebrow">👩‍⚕️ NURSES</div><p>${SIM.nurse.brief}</p></div>
               </div>
               <div class="watchgrid">${watchers.map((r) => `<div class="watch"><b>${ROLES[r].icon} ${ROLES[r].plural}</b><span>watch the ${ROLES[r].side} screen</span><p>${esc(ROLES[r].observe)}</p></div>`).join('')}</div>
-              <p class="muted">No talking. Four minutes: one quiet minute, then the alert storm.</p>
+              <p class="muted">No talking. One minute, ten steps. The alerts start almost at once.</p>
             </div>`;
         }
         return `
@@ -1319,11 +1066,11 @@
             <h1 class="huge">BEFORE YOU FIX IT, USE IT.</h1>
             ${coach()}
             <div class="taskcard"><div class="eyebrow">${S.you.role === mySide() ? 'YOUR TASK' : `THE ${mySide().toUpperCase()}'S TASK`}</div><p class="lead">${SIM[mySide()].brief}</p></div>
-            <p class="muted">Four minutes. No talking.</p>
+            <p class="muted">One minute. Ten steps. No talking.</p>
           </div>`;
 
       case 'p1_ehr':
-        if (!host) return ehrChart(mySide());
+        if (!host) return simScreen(mySide(), false);
         return `
           <div class="center narrow">
             <div class="eyebrow">PATIENT: JAMES WHITFIELD, 61 · LIVER TRANSPLANT, DAY 6</div>
@@ -1356,6 +1103,7 @@
             <h1 class="huge">SYSTEM DOWN.</h1>
             ${missedBanner(mySide())}
             <div data-dyn="ehrstats"></div>
+            ${stepMap(mySide(), (S.you.ehr && S.you.ehr.steps) || 0)}
             ${coach()}
             <h2>What stopped ${S.you.group === 'clinical' ? 'you' : 'them'} from doing the job?</h2>
             <div data-dyn="report"></div>
@@ -1402,7 +1150,7 @@
             ${host ? '<p class="lead">The hospital\'s spokesperson has two minutes to present the list to the vendors.</p>' : coach()}
             <div data-dyn="spokes"></div>
             <div data-dyn="critical"></div>
-            ${vendor ? `<h2>Your pitch cards</h2>${PACKAGE_ORDER.map(pitchCue).join('')}` : ''}
+            ${vendor ? `<h2>Your two pitch cards</h2>${PACKAGE_ORDER.filter((id) => SELLERS[PACKAGES[id].seller] === S.you.role).map(pitchCue).join('')}<p class="muted">${esc(ROLES[S.you.role === 'medcore' ? 'northwind' : 'medcore'].plural)} pitches the other two. You are competing for the same contract.</p>` : ''}
           </div>`;
 
       case 'p3_pitch':
@@ -1424,14 +1172,14 @@
           return `
             <div class="center wide">
               ${bigTimer()}
-              <h1>${money(CAP)}. Four packages. ${PASS} votes needed.</h1>
+              <h1>${money(CAP)} budget. Four packages. ${PASS} votes needed.</h1>
               ${stepList([
                 'Stay <b>inside your own team</b> for these eight minutes.',
                 'Read your private brief. Agree your <b>must-haves</b>, what you can <b>trade</b>, and your <b>red line</b>.',
                 'Each person sets a position on their own device. It can change later.',
               ])}
               <div data-dyn="count:straw"></div>
-              <div class="split"><div><div class="eyebrow">TRUE FIVE-YEAR COST</div><div data-dyn="costs"></div></div><div><div class="eyebrow">MODULE MENU · PACKAGE D</div><div data-dyn="menu"></div></div></div>
+              <div class="split"><div><div class="eyebrow">PRICE AGAINST THE BUDGET</div><div data-dyn="costs"></div></div><div><div class="eyebrow">MODULE MENU · PACKAGE D</div><div data-dyn="menu"></div></div></div>
               <div data-dyn="shared"></div>
             </div>`;
         }
@@ -1440,6 +1188,7 @@
             ${bigTimer(true)}
             <h1>TEAM HUDDLE: ${GROUPS[me.group].short.toUpperCase()}</h1>
             ${coach()}
+            <div data-dyn="stretchcue"></div>
             <div data-dyn="secrets"></div>
             ${packageLines(S.you.role)}
             ${vendor ? '' : '<h2>Your position</h2><p class="muted">A straw vote. Your team sees how your team is leaning.</p><div data-dyn="ballot:straw"></div>'}
@@ -1454,9 +1203,10 @@
             <h1>NEGOTIATE</h1>
             <div class="checkpoint" data-checkpoint></div>
             ${host ? `<p class="lead">Send people to other tables. Vendors may visit any table. A deal is a package, modules, a go-live month, and contract terms.</p>` : coach()}
+            ${host ? '' : '<div data-dyn="stretchcue"></div>'}
             <div data-dyn="strawboard"></div>
             <div data-dyn="shared"></div>
-            ${host ? '<div class="split"><div><div class="eyebrow">TRUE FIVE-YEAR COST</div><div data-dyn="costs"></div></div><div><div class="eyebrow">MODULE MENU · PACKAGE D</div><div data-dyn="menu"></div></div></div>' : `
+            ${host ? '<div class="split"><div><div class="eyebrow">PRICE AGAINST THE BUDGET</div><div data-dyn="costs"></div></div><div><div class="eyebrow">MODULE MENU · PACKAGE D</div><div data-dyn="menu"></div></div></div>' : `
               <div data-dyn="secrets"></div>
               ${vendor ? '' : '<h2>Your position</h2><p class="muted">Update it as the negotiation moves.</p><div data-dyn="ballot:straw"></div>'}
               <details class="recall"><summary>🪪 Your role card</summary>${roleCard(S.you.role)}${packageLines(S.you.role)}</details>
@@ -1475,7 +1225,7 @@
                    `A deal passes with <b>${PASS} of ${TOTAL_VOTES} votes</b>. Executives hold 2.`,
                    'Each group votes as a block: the package most of its members choose.',
                    'A module or term is adopted when groups holding a majority of votes want it.',
-                   `Modules are bought in order of support <b>until the ${money(CAP)} cap is reached</b>.`,
+                   `Modules are bought in order of support <b>until the ${money(CAP)} budget runs out</b>.`,
                    'If nothing reaches the bar, the executives decide and must explain why.',
                  ])}`
               : vendor
@@ -1504,6 +1254,7 @@
             <div>
               <div class="eyebrow">CONTRACT TERMS</div>
               ${d.terms.length ? `<ul class="terms">${d.terms.map((id) => `<li>${esc(TERM[id].label)}</li>`).join('')}</ul>` : '<p class="muted">No terms had majority support.</p>'}
+              ${d.droppedTerms && d.droppedTerms.length ? `<p class="dropped">Wanted, but over budget without finance's signature: ${d.droppedTerms.map((id) => esc(TERM[id].label)).join(' · ')}</p>` : ''}
             </div>
             ${dealBox(d)}
             <p class="lead">🤝 CEO: announce the decision to the vendor. ${d.pkg === 'keep' ? '' : 'Vendors: accept, or refuse.'}</p>
@@ -1512,19 +1263,13 @@
       }
 
       case 'p6_sim': {
-        if (!host) return afterEhr(mySide());
-        const d = S.decision;
-        const cov = coverage(d);
+        if (!host) return simScreen(mySide(), true);
         return `
-          <div class="center narrow reveal">
-            ${bigTimer()}
-            <h1 class="huge">ONE YEAR LATER</h1>
-            <p class="lead">${d.pkg === 'keep' ? 'Nothing was installed.' : `${esc(PACKAGES[d.pkg].name)} is live.`} It is 13:02 on 6 West again. Open Mr. Whitfield's chart.</p>
-            <div class="stats">
-              <div class="stat"><b>347 → ${PACKAGES[d.pkg].alertsAfter}</b><span>alerts in three minutes</span></div>
-              <div class="stat"><b>${cov.full.size} of 15</b><span>problems fixed${cov.partial.size ? `, ${cov.partial.size} more partly` : ''}</span></div>
-            </div>
-            <p class="muted">Do the same task again. Count your clicks. Then look at what did not change.</p>
+          <div class="center wide">
+            <div class="timeline"><h1>ONE YEAR LATER, 13:02 ON 6 WEST</h1>${bigTimer()}</div>
+            <p class="muted">Everyone is redoing the same ten steps in the new system on their own device. This is the same screen, for the room.</p>
+            <div data-dyn="simswitch"></div>
+            <div data-dyn="hostsim"></div>
           </div>`;
       }
 
@@ -1550,7 +1295,7 @@
             <ul class="cardlist">${pkg.cards.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
             <div class="scores">${scorecard(d)}</div>
             ${dealBox(d)}
-            ${shock.length ? `<div class="shock"><div class="eyebrow bad">WHAT NOBODY BUDGETED</div>${shock.map((x) => `<p>－ ${esc(x)}</p>`).join('')}</div>` : ''}
+            ${shock.length ? `<div class="shock"><div class="eyebrow bad">WHAT ARRIVED AFTER SIGNING</div>${shock.map((x) => `<p>－ ${esc(x)}</p>`).join('')}</div>` : ''}
             <div class="outcards ${host ? '' : 'mine-first'}">${roles.map((r) => roleOutcome(r, d)).join('')}</div>
           </div>`;
       }
@@ -1764,7 +1509,7 @@
     el.querySelector('.bar-total').textContent = unit || '';
   }
 
-  const SEATS = { exec: '3 to 5', finance: '3 to 5', physician: '4 to 6', nurse: '4 to 6', it: '3 to 5', compliance: '3 to 4', patients: '2 to 4', vendor: '3 to 5' };
+  const SEATS = { exec: '3 to 5', finance: '3 to 5', physician: '4 to 6', nurse: '4 to 6', it: '3 to 5', compliance: '3 to 4', patients: '2 to 4', medcore: '2 to 3', northwind: '2 to 3' };
   const pkgRows = (tally) =>
     BALLOT_ORDER.map((id) => ({ k: id, label: id === 'keep' ? 'No deal' : `${PACKAGES[id].letter} · ${PACKAGES[id].name}`, cls: `p${id}`, n: tally.counts[id] }));
   const letterOf = (id) => (id === 'keep' ? 'no deal' : PACKAGES[id].letter);
@@ -1805,7 +1550,8 @@
         <p class="leadline"><b>${esc(pkgTitle(d.pkg))}</b> · ${d.passed ? `passes with ${d.votes} of ${t.present} votes` : d.byExec ? `only ${t.counts[d.pkg]} of ${t.present} votes: the executives would have to decide` : `no deal reaches ${t.need} votes`}</p>
         ${d.pkg === 'd' ? `<p>Modules bought: <b>${d.modules.length ? d.modules.map((id) => esc(MODULE[id].label)).join(', ') : 'none'}</b>${d.dropped.length ? ` · <span class="dropped">no money left for: ${d.dropped.map((id) => esc(MODULE[id].label)).join(', ')}</span>` : ''}</p>` : ''}
         ${d.terms.length ? `<p>Terms: ${d.terms.map((id) => esc(TERM[id].label)).join(' · ')}</p>` : ''}
-        ${d.pkg === 'keep' ? '' : `<p class="${c.over ? 'overline' : 'underline'}">True cost <b>${money(c.total)}</b> against a ${money(c.cap)} cap: ${c.over ? `${money(c.total - c.cap)} OVER` : `${money(c.cap - c.total)} to spare`}</p>`}
+        ${d.droppedTerms && d.droppedTerms.length ? `<p class="dropped">Over budget, so not bought: ${d.droppedTerms.map((id) => esc(TERM[id].label)).join(' · ')}. Only a stretch signed by finance changes this.</p>` : ''}
+        ${d.pkg === 'keep' ? '' : `<p class="${c.over ? 'overline' : 'underline'}">Contract <b>${money(c.total)}</b> against a ${money(c.cap)} budget: ${c.over ? `${money(c.total - c.cap)} OVER` : `${money(c.cap - c.total)} to spare`}</p>`}
       </div>`;
   }
 
@@ -1814,19 +1560,21 @@
     const critical = inTier(TIERS[0]);
     return (
       '<div class="pkgs">' +
+      '<div class="vendorhead">⏳ MEDCORE <small>the incumbent: the vendor you have today</small></div><div class="vendorhead rival">⚡ NORTHWIND <small>the challenger: wants to replace them</small></div>' +
       PACKAGE_ORDER.map((id) => {
         const pkg = PACKAGES[id];
         const cov = coverage({ pkg: id, modules: [] });
-        const c = dealCost({ pkg: id }, id === 'b' && revealedB());
+        const c = dealCost({ pkg: id });
         const missed = critical.filter((p) => !cov.full.has(p.id));
         return `
           <div class="pkg p${id}" tabindex="0">
             ${current === id ? '<div class="pitch-tag">NOW PITCHING</div>' : ''}
             <div class="pkg-head"><span class="pkg-letter p${id}">${pkg.letter}</span><span>${pkg.icon} ${pkg.name}</span></div>
-            <p class="pkg-tag">${esc(pkg.seller)}. ${esc(pkg.tagline)}</p>
+            <p class="pkg-frame">${esc(pkg.frame)}</p>
+            <p class="pkg-tag">${esc(pkg.seller)}. ${esc(pkg.stance)}</p>
             <div class="pkg-stats">
               <div><small>PRICE</small><b>${money(pkg.price)}${id === 'd' ? '+' : ''}</b></div>
-              <div><small>TRUE COST</small><b>${money(c.total)}</b></div>
+              <div><small>LEFT OF ${money(CAP)}</small><b>${money(CAP - c.total)}</b></div>
               <div><small>GO-LIVE</small><b>${pkg.months} mo</b></div>
             </div>
             <p class="pkg-fix"><b>${cov.full.size} of 15</b> problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}${id === 'd' ? ' (more with modules)' : ''}</p>
@@ -1890,7 +1638,7 @@
       const total = S.ehr.physician.dismissed + S.ehr.nurse.dismissed;
       const t = elapsedSec();
       const phase = t < STORM_START
-        ? '<h1>Minute one: a normal bad day.</h1><p class="lead">A few reminders. A dose to give. A level to find.</p>'
+        ? '<h1>Ten steps. One minute.</h1><p class="lead">A level to find. A dose to give. A chart to close.</p>'
         : t < CRASH_AT
           ? '<h1 class="storm">ALERT STORM</h1><p class="lead">The lab interface is resending results. Every rule is re-firing on all 22 orders.</p>'
           : '<h1 class="storm">SYSTEM DOWN</h1><p class="lead">The application server ran out of memory. Every workstation on 6 West just froze.</p>';
@@ -1901,27 +1649,19 @@
       const { physician, nurse } = S.ehr;
       const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
       const parts = [];
-      const total = physician.dismissed + nurse.dismissed;
       const stat = (n, text) => parts.push(`<div class="stat"><b>${n}</b><span>${text}</span></div>`);
-      if (total) stat(total, 'alerts dismissed by the hospital in four minutes');
-      if (physician.critSeen) stat(secs(physician.critMedianMs), 'median time the tacrolimus interaction warning stayed on a physician screen');
-      if (nurse.critSeen) stat(secs(nurse.critMedianMs), 'median time the potassium alert stayed on a nurse screen');
-      if (physician.players) {
-        stat(physician.doseHold, 'held tonight\'s tacrolimus (the right call)');
-        stat(physician.doseContinue + physician.doseReduce, 'signed another dose at a level of 19.4');
-        stat(physician.doseNone, 'never finished the order before the crash');
-      }
-      if (nurse.players) {
-        stat(nurse.gaveSupp, 'gave a potassium supplement at a potassium of 6.2');
-        stat(nurse.gaveLact, 'gave lactulose he no longer needs');
-        stat(nurse.insulin, 'finished the ten-step insulin dose');
-      }
+      const total = physician.dismissed + nurse.dismissed;
+      if (total) stat(total, 'alerts dismissed by the hospital in under a minute');
+      if (physician.players) stat(`${physician.stepsAvg} of 10`, 'steps the average physician screen finished before the crash');
+      if (nurse.players) stat(`${nurse.stepsAvg} of 10`, 'steps the average nurse screen finished before the crash');
+      if (physician.critSeen) stat(secs(physician.critMedianMs), 'median time the tacrolimus interaction warning stayed on screen');
+      if (nurse.critSeen) stat(secs(nurse.critMedianMs), 'median time the potassium alert stayed on screen');
+      if (nurse.players) stat(nurse.gaveSupp, 'gave a potassium supplement at a potassium of 6.2');
       const mine = [];
       const e = !S.isHost && S.you.ehr;
-      if (e && typeof e.critMs === 'number') mine.push(`You dismissed that alert after <b class="accent">${secs(e.critMs)}</b>.`);
-      if (e && e.dose === 'hold') mine.push('You held tonight\'s tacrolimus. <b class="accent">Right call.</b>');
-      if (e && (e.dose === 'continue' || e.dose === 'reduce')) mine.push('You signed another tacrolimus dose. <b class="red">The level was 19.4.</b>');
-      if (e && e.given.includes('supp')) mine.push('You documented the <b class="red">potassium supplement</b> as given. His potassium was 6.2.');
+      if (e) mine.push(`You finished <b class="accent">${e.steps || 0} of 10</b> steps and dismissed <b class="accent">${e.n}</b> alerts.`);
+      if (e && typeof e.critMs === 'number') mine.push(`You dismissed the one that mattered after <b class="accent">${secs(e.critMs)}</b>.`);
+      if (e && e.given.includes('supp')) mine.push('You gave the <b class="red">potassium supplement</b>. His potassium was 6.2, and nothing on the screen stopped you.');
       if (e && e.given.includes('lact')) mine.push('You gave <b class="red">lactulose</b>, an order carried over from the liver he no longer has.');
       setHtml(el, (parts.length ? `<div class="stats">${parts.join('')}</div>` : '') + mine.map((m) => `<p class="lead">${m}</p>`).join(''));
     },
@@ -2081,8 +1821,14 @@
     },
     pitchcue(el) {
       const id = PACKAGE_ORDER[pitchIndex()];
-      const next = PACKAGE_ORDER[pitchIndex() + 1];
-      setHtml(el, `<div class="eyebrow">YOUR CUE CARD</div>${pitchCue(id)}${next ? `<p class="muted small">Next up: Package ${PACKAGES[next].letter} · ${PACKAGES[next].name}</p>` : ''}`);
+      const pkg = PACKAGES[id];
+      const mine = SELLERS[pkg.seller] === S.you.role;
+      setHtml(
+        el,
+        mine
+          ? `<div class="eyebrow">YOUR CUE CARD: YOU HAVE THE FLOOR</div>${pitchCue(id)}`
+          : `<div class="cue p${id}"><div class="cue-head"><span class="pkg-letter p${id}">${pkg.letter}</span> Your rival, ${esc(pkg.seller)}, is pitching</div><p>${esc(ROLES[S.you.role].brief[id])}</p><p class="muted small">Listen for what they leave out. You cannot interrupt. Use it in Phase 4.</p></div>`
+      );
     },
 
     menu(el) {
@@ -2090,25 +1836,27 @@
         el,
         `<table class="gtable"><tr><th>Module</th><th>Price</th><th>What it solves</th><th>Wanted by</th></tr>
           ${MODULES.map((m) => `<tr><td>${m.icon} <b>${esc(m.label)}</b></td><td class="num">${money(m.price)}</td><td>${esc(m.solves)}</td><td>${ROLES[m.role].icon} ${ROLES[m.role].plural}</td></tr>`).join('')}
-          <tr class="total"><td>All eight</td><td class="num">${money(MODULES.reduce((s, m) => s + m.price, 0))}</td><td colspan="2">Package D base leaves ${money(CAP - dealCost({ pkg: 'd' }).total)} under the cap.</td></tr>
+          <tr class="total"><td>All eight</td><td class="num">${money(MODULES.reduce((s, m) => s + m.price, 0))}</td><td colspan="2">Package D leaves ${money(CAP - dealCost({ pkg: 'd' }).total)} of the budget for modules.</td></tr>
         </table>`
       );
     },
 
+    // Price against the cap. The costs that arrive after signing appear only once finance or IT publishes them.
     costs(el) {
+      const showAfter = isShared('fi_after');
+      const showB = isShared('it_bhidden');
       const row = (id) => {
         const pkg = PACKAGES[id];
-        const shown = id === 'b' && revealedB();
-        const c = dealCost({ pkg: id }, shown);
-        const diff = c.total - CAP;
-        return `<tr><td><span class="pkg-letter p${id}">${pkg.letter}</span> ${pkg.name}${id === 'd' ? ', base only' : ''}</td><td class="num">${pkg.price}</td><td class="num ${pkg.lost > RESERVE ? 'bad' : ''}">${pkg.lost}</td><td class="num">${pkg.old}</td>
-          <td class="num">${shown ? `<span class="bad">+${pkg.hidden} hidden</span>` : ''}</td><td class="num"><b>${money(c.total)}</b></td><td class="num ${diff > 0 ? 'bad' : 'good'}">${diff > 0 ? `${money(diff)} over` : `${money(-diff)} under`}</td></tr>`;
+        const c = dealCost({ pkg: id });
+        const after = showAfter ? pkg.lost + pkg.old + (showB && pkg.hidden ? pkg.hidden : 0) : showB && pkg.hidden ? pkg.hidden : 0;
+        return `<tr><td><span class="pkg-letter p${id}">${pkg.letter}</span> ${pkg.name}${id === 'd' ? ', before modules' : ''}</td><td>${esc(pkg.seller)}: ${esc(pkg.frame.toLowerCase())}</td><td class="num"><b>${money(c.total)}</b></td><td class="num good">${money(CAP - c.total)}</td>
+          ${showAfter || showB ? `<td class="num ${after ? 'bad' : ''}">${after ? `+${money(after)}` : ''}</td>` : ''}</tr>`;
       };
       setHtml(
         el,
-        `<table class="gtable"><tr><th>Package</th><th>Price</th><th>Lost revenue at go-live</th><th>Old system during switch</th><th></th><th>True cost</th><th>vs ${money(CAP)} cap</th></tr>
+        `<table class="gtable"><tr><th>Package</th><th>Vendor and pitch</th><th>Price</th><th>Left of ${money(CAP)}</th>${showAfter || showB ? '<th>After signing</th>' : ''}</tr>
           ${PACKAGE_ORDER.map(row).join('')}</table>
-         <p class="muted small">$ millions, five-year totals. The cash reserve covers ${money(RESERVE)} of lost revenue.</p>`
+         <p class="muted small">$ millions, five-year totals. ${showAfter ? `After signing: lost revenue at go-live and running the old system during the switch. The cash reserve covers ${money(RESERVE)} of lost revenue.` : 'Prices are what is on the vendor\'s sheet.'}</p>`
       );
     },
 
@@ -2138,11 +1886,11 @@
       const pkgs = BALLOT_ORDER.map((id) => {
         const pkg = PACKAGES[id];
         const teamCount = kind === 'straw' && team[id] ? `<span class="pkgbtn-team">team: ${team[id]}</span>` : '';
-        const c = dealCost({ pkg: id }, id === 'b' && revealedB());
+        const c = dealCost({ pkg: id });
         return `
           <button class="pkgbtn p${id} ${mine.pkg === id ? 'on' : ''}" data-act="pkg" data-kind="${kind}" data-pkg="${id}">
             <span class="pkg-letter p${id}">${pkg.letter}</span>
-            <span class="pkgbtn-name">${pkg.icon} ${pkg.name}<small>${id === 'keep' ? 'Sign nothing. The old EHR costs $4.2M a year.' : `True cost ${money(c.total)}${id === 'd' ? ' + modules' : ''} · ${pkg.golive}`}</small></span>
+            <span class="pkgbtn-name">${pkg.icon} ${pkg.name}<small>${id === 'keep' ? 'Sign nothing. The old EHR costs $4.2M a year.' : `${money(c.total)}${id === 'd' ? ' + modules' : ''} · ${pkg.frame} · ${pkg.golive}`}</small></span>
             ${teamCount}
           </button>`;
       }).join('');
@@ -2184,8 +1932,8 @@
       }
       let sum = '';
       if (mine.pkg && mine.pkg !== 'keep') {
-        const c = dealCost(mine, mine.pkg === 'b' && revealedB());
-        sum = `<div class="mydeal ${c.over ? 'over' : 'under'}">YOUR DEAL: true cost <b>${money(c.total)}</b> against a ${money(c.cap)} cap · ${c.over ? `${money(c.total - c.cap)} OVER` : `${money(c.cap - c.total)} to spare`}</div>`;
+        const c = dealCost(mine);
+        sum = `<div class="mydeal ${c.over ? 'over' : 'under'}">YOUR DEAL: <b>${money(c.total)}</b> against a ${money(c.cap)} budget · ${c.over ? `${money(c.total - c.cap)} OVER` : `${money(c.cap - c.total)} to spare`}</div>`;
       }
       setHtml(
         el,
@@ -2234,6 +1982,74 @@
       setHtml(el.querySelector('[data-part=roles]'), groupPicksHtml(t));
     },
 
+    // Projector controls for the replay: which screen, and which system (the room's choice is starred).
+    simswitch(el) {
+      const chosen = S.decision.pkg;
+      const cur = hostSim.pkg || chosen;
+      const side = (k, label) => `<button class="btn sm ${hostSim.side === k ? 'primary' : ''}" data-act="simside" data-v="${k}">${label}</button>`;
+      const pk = (id) => `<button class="btn sm ${cur === id ? 'primary' : ''}" data-act="simpkg" data-v="${id}">${id === 'keep' ? 'No deal' : `${PACKAGES[id].letter} · ${PACKAGES[id].name}`}${id === chosen ? ' ★' : ''}</button>`;
+      setHtml(
+        el,
+        `<div class="simswitch"><span class="eyebrow">SCREEN</span>${side('physician', 'Physician')}${side('nurse', 'Nurse')}
+           <span class="eyebrow">SYSTEM</span>${BALLOT_ORDER.map(pk).join('')}</div>
+         <p class="muted small">★ is what the room bought. The other buttons show the same minute under each alternative${chosen === 'd' ? '' : ' (Package D is shown without modules)'}.</p>`
+      );
+    },
+    hostsim(el) {
+      const key = `${hostSim.side}:${hostSim.pkg || S.decision.pkg}`;
+      if (el._key === key) return;
+      el._key = key;
+      el.innerHTML = iconize(simScreen(hostSim.side, true));
+      startSim(hostSim.side, true);
+    },
+
+    // Executives and clinicians are prompted to ask finance to stretch the budget.
+    // Finance is prompted to agree only when the request stands up.
+    stretchcue(el) {
+      const group = S.you.group;
+      if (!['exec', 'clinical', 'finance'].includes(group)) return setHtml(el, '');
+      const d = S.straw;
+      const t = d.tally;
+      const backers = t.termGroups.stretch || [];
+      const financeIn = backers.includes('finance');
+      const leftOut = d.empty ? [] : [...(d.droppedTerms || []).map((id) => TERM[id].label), ...d.dropped.map((id) => MODULE[id].label)];
+      const status = `<p class="cue-status ${financeIn ? 'yes' : 'no'}">${financeIn ? '✅ Finance is currently agreeing to the stretch.' : '❌ Finance has not agreed to a stretch.'}</p>`;
+      if (group !== 'finance') {
+        const pitch = group === 'exec'
+          ? 'Offer finance something back: a vendor penalty clause, a refund, a credit, or a waived fee.'
+          : S.you.role === 'nurse'
+            ? 'Bring a number: three nurses have left 6 West, and each costs $60,000 to replace.'
+            : 'Bring a number: every physician loses about 2 hours a night to the EHR, and 96% of alerts are overridden.';
+        return setHtml(
+          el,
+          `<div class="cuecard ask"><div class="cuecard-head">💰 YOUR CUE: ASK FINANCE TO STRETCH THE BUDGET</div>
+             <p>${leftOut.length ? `The room wants more than ${money(CAP)} buys. <b>Left out for lack of money: ${leftOut.map(esc).join(', ')}.</b>` : `If what you need does not fit in ${money(CAP)}, the board allows ${money(STRETCH_CAP)}, but only if finance signs for it.`}</p>
+             <ol><li>Tick <b>"Stretch the budget to ${money(STRETCH_CAP)}"</b> on your ballot. That is your request.</li><li>Go to the finance table and say exactly what the extra money buys.</li><li>${pitch}</li></ol>
+             ${status}</div>`
+        );
+      }
+      const askers = backers.filter((g) => g !== 'finance').map((g) => GROUPS[g].short);
+      const pkg = d.empty ? null : PACKAGES[d.pkg];
+      const want = d.empty ? null : dealCost({ pkg: d.pkg, modules: [...d.modules, ...d.dropped], terms: [...d.terms, ...(d.droppedTerms || [])].filter((id) => id !== 'stretch') });
+      const extra = want ? want.total - CAP : 0;
+      const gives = d.empty ? [] : d.terms.filter((id) => ['penalty', 'penaltyb', 'refund', 'exitfee', 'credit', 'medcorefee'].includes(id));
+      const check = (ok, text) => `<li class="${ok ? 'yes' : 'no'}">${ok ? '✅' : '❌'} ${text}</li>`;
+      setHtml(
+        el,
+        `<div class="cuecard grant"><div class="cuecard-head">💰 YOUR CUE: STRETCH THE BUDGET ONLY IF IT MAKES SENSE</div>
+           <p>${askers.length ? `<b>${askers.join(' and ')}</b> ${askers.length === 1 ? 'is' : 'are'} asking you to raise the budget from ${money(CAP)} to ${money(STRETCH_CAP)}.` : 'Nobody has asked you to stretch the budget yet. Executives and clinicians have been told they can.'}</p>
+           ${d.empty ? '<p class="muted">The room has no position yet.</p>' : `<ul class="cue-checks">
+             ${check(extra > 0, extra > 0 ? `The stretch buys something real: the room's deal is ${money(extra)} over budget${leftOut.length ? ` for ${leftOut.map(esc).join(', ')}` : ''}.` : `Everything the room wants already fits in ${money(CAP)}. A stretch would buy nothing.`)}
+             ${check(pkg.lost <= RESERVE, `Lost revenue at go-live (${money(pkg.lost)}) is ${pkg.lost <= RESERVE ? 'within' : 'above'} your ${money(RESERVE)} reserve.`)}
+             ${check(gives.length > 0, gives.length ? `The vendor has given something back: ${gives.map((id) => esc(TERM[id].label)).join('; ')}.` : 'The vendor has given nothing back yet. Ask for a penalty clause, a refund, a credit, or a waived fee.')}
+             ${check(want.after <= 10, `Another ${money(want.after)} arrives after signing that is not in the contract.`)}
+           </ul>`}
+           <p>Doing nothing costs about $4.2M a year. A fix that prevents that can pay for itself.</p>
+           <p><b>To accept:</b> tick "Stretch the budget to ${money(STRETCH_CAP)}" on your ballot. It counts only if at least half of finance ticks it. <b>To refuse:</b> leave it unticked and tell them what would change your mind.</p>
+           ${status}</div>`
+      );
+    },
+
     fixedpick(el) {
       const opts = [['yes', '✅ Yes'], ['partly', '◐ Partly'], ['no', '❌ No']];
       setHtml(el, '<div class="rating">' + opts.map(([k, label]) => `<button class="${reflectDraft.fixed === k ? 'on' : ''}" data-act="fixedpick" data-v="${k}">${label}</button>`).join('') + '</div>');
@@ -2270,10 +2086,11 @@
     if (key !== screenKey) {
       screenKey = key;
       ehrStop();
+      hostSim.pkg = null;
       const body = needsRole
         ? `<div class="center">
              <h1>Choose your seat, ${esc(S.you.name)}</h1>
-             <p class="muted">Seven groups. Nurses and physicians are two tables of one group.</p>
+             <p class="muted">Seven groups. Nurses and physicians are two tables of one group. MedCore and Northwind are rival vendors.</p>
              <button class="btn primary big" data-act="role" data-role="random">🎲 Assign me randomly</button>
              <p class="muted small">Random assignment follows the seat plan, so every group fills evenly.</p>
              <div class="rolegrid" data-dyn="rolepick"></div>
@@ -2285,19 +2102,8 @@
       window.scrollTo(0, 0);
       if (!S.isHost && !needsRole) {
         const side = mySide();
-        if (S.step === 'p1_ehr') ehrStart(ALERTS[side], true, CRASH_AT);
-        if (S.step === 'p6_sim') {
-          Object.assign(aft, { clicks: 0, dose: null, signed: false, stopped: false, mar: {}, vitals: 0, alert: false });
-          renderAfter();
-          if (coverage(S.decision).full.has('alerts')) {
-            // One interruption, with the thing that matters.
-            setTimeout(() => S && S.step === 'p6_sim' && aftShowAlert(side), 1800);
-          } else {
-            // Nothing fixed the alerting, so the storm and the crash happen again a year later.
-            const replay = STORM[side].slice(0, 16).map((a, i) => ({ ...a, crit: false, t: 2 + i * 1.1 }));
-            ehrStart(replay, false, 22);
-          }
-        }
+        if (S.step === 'p1_ehr') startSim(side, false);
+        if (S.step === 'p6_sim') startSim(side, true);
       }
     }
 
@@ -2366,17 +2172,22 @@
         return;
       case 'dismiss':
         return ehrDismiss(el);
-      case 'aft':
-        return aftClick(el.dataset.k, el.dataset.v);
-      case 'mar':
-        return marClick(el.dataset.med);
-      case 'dose':
-        return doseClick(el.dataset.dose);
-      case 'ehr-save': {
-        const msg = document.querySelector('[data-savemsg]');
-        if (msg) msg.innerHTML = '<span class="mar-fail">Cannot save: 3 required fields incomplete (Fall risk, Braden, Pain reassessment).</span>';
-        return;
+      case 'simrow':
+        return simClick('row', Number(el.dataset.i));
+      case 'simnext':
+        return simClick('next');
+      case 'simalert': {
+        const layer = document.getElementById('ehr-alert');
+        if (layer) layer.classList.remove('show');
+        sim.clicks++;
+        return renderSim();
       }
+      case 'simside':
+        hostSim.side = el.dataset.v;
+        return render();
+      case 'simpkg':
+        hostSim.pkg = el.dataset.v;
+        return render();
       case 'report':
         S.you.report.problems = toggle(S.you.report.problems, el.dataset.id);
         render();
