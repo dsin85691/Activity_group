@@ -1101,3 +1101,109 @@ body.ehr-mode { overflow-x: hidden; }
 .sim-card.fresh .sim-row:first-child { background: #1463d6; border-color: #1463d6; color: #fff; box-shadow: 0 2px 8px rgba(20, 99, 214, 0.35); }
 .sim-card.fresh .sim-row:hover { border-color: #1463d6; }
 .sim-good { color: #0d7a43; font-weight: 600; }
+
+/* package cards: two vendor groups, equal card widths at every size */
+.pkgs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.vendorgroup { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: stretch; min-width: 0; }
+.vendorgroup .vendorhead { grid-column: 1 / -1; }
+.pkg { min-width: 0; overflow-wrap: anywhere; }
+.pkg-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pkg-stats b { white-space: normal; }
+.center.narrow .pkgs, .recall .pkgs, .modal .pkgs { grid-template-columns: minmax(0, 1fr); }
+.pkg-switch { font-size: 0.85rem; margin: 8px 0 0; color: var(--green); }
+.pkg-switch.risky { color: #ff8a96; }
+.pkg-out { font-size: 0.83rem; margin: 6px 0; color: var(--muted); }
+.pkg-out b { color: var(--text); }
+@media (max-width: 1100px) { .pkgs { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .vendorgroup { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- replay: before against now ---------- */
+.sim-guide { background: #fff8d6; color: #3b2f00; border-bottom: 1px solid #e3c24a; padding: 8px 14px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.sim-guide .g-before { background: #e2e2e2; border-radius: 4px; padding: 0 6px; font-weight: 600; }
+.sim-guide .g-now { background: #c8f7dc; border-radius: 4px; padding: 0 6px; font-weight: 600; }
+.sim-guide .sim-tag { vertical-align: 1px; }
+.sim-compare { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: #0d1b2a; background: #fff; border: 1px solid #d6dee9; border-radius: 10px; padding: 12px 16px; box-shadow: 0 2px 10px rgba(13, 27, 42, 0.1); }
+.sim-head span { font-size: 0.78rem; font-weight: 700; color: #5a6b80; letter-spacing: 0.04em; }
+.sim-head h3 { margin: 2px 0 8px; font-size: 1.25rem; color: #0d1b2a; }
+.sim-verdict { display: flex; gap: 8px; align-items: flex-start; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 0.95rem; }
+.sim-verdict .ic { margin-top: 2px; }
+.sim-verdict.fresh { background: #e6f7ee; color: #0d5c33; border: 1px solid #9ad8b5; }
+.sim-verdict.part { background: #fff3d6; color: #6b4300; border: 1px solid #e9c46a; }
+.sim-verdict.old { background: #f1f1f1; color: #444; border: 1px solid #cfcfcf; }
+.sim-cols { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 12px; align-items: start; }
+.sim-cols.single { grid-template-columns: minmax(0, 1fr); }
+.sim-label { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; margin-bottom: 6px; }
+.sim-before { background: #ececec; color: #555; border: 1px dashed #b5b5b5; border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; }
+.sim-before .sim-label { color: #777; }
+.sim-before p { margin: 4px 0; }
+.sim-effort b { color: #7a0012; }
+.sim-now.fresh { border-left: 5px solid #0d7a43; box-shadow: none; }
+.sim-now.fresh .sim-label { color: #0d7a43; }
+.sim-now.old .sim-label { color: #333; font-family: Tahoma, Verdana, sans-serif; }
+.sim-todo { display: flex; gap: 6px; align-items: flex-start; background: #eef4ff; border-radius: 6px; padding: 6px 10px; margin: 0 0 8px; color: #0d1b2a; }
+.sim-card.old .sim-todo { background: #ffffe1; border: 1px solid #808080; border-radius: 0; font-size: 12px; }
+.sim-todo .ic { color: #1463d6; margin-top: 2px; }
+.sim-about { margin: 10px 0 0; font-size: 0.82rem; color: #5a6b80; }
+.sim-about .pchip { background: #f4f7fb; border-color: #d6dee9; color: #33475b; font-size: 0.78rem; }
+.sim-card.fresh .sim-btn { animation: nudge 1.6s ease-in-out infinite; }
+@keyframes nudge { 50% { box-shadow: 0 0 0 6px rgba(20, 99, 214, 0.22); } }
+.sim-seq { flex-wrap: wrap; }
+
+/* the ending scoreboard */
+.sim-score { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.sim-score div { background: #f4f7fb; border-radius: 8px; padding: 8px 10px; display: grid; }
+.sim-score b { font-size: 1.5rem; font-family: var(--mono); }
+.sim-score span { font-size: 0.78rem; color: #5a6b80; }
+.sim-score .good b { color: #0d7a43; }
+.sim-score .warn b { color: #9a6200; }
+.sim-score .bad b { color: #b3001b; }
+.sim-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin-top: 8px; }
+.sim-table th { text-align: left; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #5a6b80; border-bottom: 2px solid #d6dee9; padding: 4px 6px; }
+.sim-table td { padding: 5px 6px; border-bottom: 1px solid #e8edf3; vertical-align: top; }
+.sim-table tr.old td { color: #777; }
+.sim-also-head { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; color: #5a6b80; margin-top: 12px; }
+@media (max-width: 760px) {
+  .sim-cols { grid-template-columns: minmax(0, 1fr); }
+  .sim-score { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sim-table th:nth-child(3), .sim-table td:nth-child(3) { display: none; }
+}
+
+/* how to play */
+.howbtn .ic { color: var(--accent); }
+.howto h2 { margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+.how-goal { margin: 0 0 10px; }
+.how-part { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 10px 0; }
+.how-part.now { border-color: var(--accent); box-shadow: 0 0 18px rgba(45, 226, 197, 0.25); }
+.how-head { font-family: var(--mono); font-weight: 800; font-size: 0.78rem; letter-spacing: 0.12em; color: var(--blue); }
+.how-part.now .how-head { color: var(--accent); }
+.how-head span { background: var(--accent); color: #04221d; border-radius: 4px; padding: 1px 6px; margin-left: 8px; font-size: 0.68rem; }
+.how-part ol { margin: 6px 0 2px; padding-left: 1.3em; }
+.how-part li { margin: 0.35em 0; }
+.verdict { flex: none; font-family: var(--mono); font-size: 0.66rem; font-weight: 800; letter-spacing: 0.06em; border-radius: 4px; padding: 3px 6px; min-width: 6.6em; text-align: center; margin-top: 2px; }
+.v-yes { background: rgba(54, 214, 127, 0.18); color: var(--green); border: 1px solid var(--green); }
+.v-if { background: rgba(255, 176, 32, 0.15); color: var(--amber); border: 1px solid var(--amber); }
+.v-no { background: rgba(255, 77, 94, 0.15); color: #ff8a96; border: 1px solid var(--red); }
+.v-own { background: rgba(78, 168, 255, 0.18); color: var(--blue); border: 1px solid var(--blue); }
+.v-rival { background: rgba(255, 255, 255, 0.06); color: var(--muted); border: 1px solid var(--line); }
+@media (max-width: 760px) { .howbtn span { display: none; } }
+/* pop-up panels need a solid surface so the page behind does not show through */
+.modal { background: rgba(3, 9, 18, 0.86); }
+.modal-box.wide { background: #0a1a2e; border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: 0 0 0 1px rgba(78, 168, 255, 0.25), 0 0 50px rgba(78, 168, 255, 0.2); }
+
+/* hints: never leave a player without a next move */
+.coach-lost { margin: 6px 0 0; font-size: 0.82em; color: var(--muted); }
+.sim-yourtask { display: inline-block; font-family: var(--mono, monospace); font-size: 0.62em; font-weight: 800; letter-spacing: 0.1em; background: #1463d6; color: #fff; border-radius: 4px; padding: 2px 7px; vertical-align: 0.2em; margin-right: 4px; }
+.sim-card.old h3 .sim-yourtask { background: #ffcc00; color: #000; border-radius: 0; }
+.sim-todo b { color: #b3001b; }
+.sim-row.hint { outline: 3px solid #1463d6; outline-offset: -3px; background: #e8f0ff !important; font-weight: bold; animation: nudge 1.4s ease-in-out infinite; }
+.sim-card.old .sim-row.hint { outline-color: #0a246a; background: #ffffcc !important; }
+
+.sim-head h3 .sim-yourtask, .sim-card h3 .sim-yourtask { color: #fff; font-size: 0.62em; letter-spacing: 0.1em; }
+.sim-card.old h3 .sim-yourtask { color: #000; }
+.sim-todo b.sim-todo-label { color: inherit; }
+
+/* starring: the problems closest to this seat's must-haves come first, with the reason */
+.care-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: var(--mono); font-size: 0.74rem; font-weight: 800; letter-spacing: 0.12em; color: var(--amber); margin: 12px 0 6px; text-align: left; }
+.care-head.rest { color: var(--muted); margin-top: 18px; }
+.prow.care { border-color: rgba(255, 176, 32, 0.55); background: rgba(255, 176, 32, 0.06); }
+.prow .care-why { color: var(--amber); font-size: 0.86rem; }

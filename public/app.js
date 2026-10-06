@@ -3,7 +3,7 @@
 
   const {
     HOSPITAL, CAP, STRETCH_CAP, RESERVE, PASS, TOTAL_VOTES,
-    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, SELLERS, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS, dealCost, coverage,
+    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, SELLERS, STANCE, CARES, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS, dealCost, coverage,
   } = window.CONTENT;
   const PROBLEM = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
   const MODULE = Object.fromEntries(MODULES.map((m) => [m.id, m]));
@@ -22,7 +22,7 @@
     const body = ICONS[name];
     return body ? `<svg class="ic ${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>` : '';
   }
-  const EMOJI = { '🏥': 'building-hospital', '🏛️': 'building-bank', '💰': 'coin', '🩺': 'stethoscope', '🧑‍⚕️': 'stethoscope', '👩‍⚕️': 'nurse', '💻': 'server-2', '⚖️': 'scale', '🙋': 'heart-handshake', '🤝': 'briefcase', '⏳': 'history', '⚡': 'bolt', '🩹': 'bandage', '🔁': 'refresh', '🧩': 'puzzle', '🚫': 'ban', '🎙️': 'microphone', '🔗': 'link', '🚪': 'door-exit', '📥': 'inbox', '🗄️': 'database', '🧭': 'compass', '📱': 'device-mobile', '🎓': 'school', '🎲': 'dice-5', '🔒': 'lock', '📣': 'speakerphone', '⭐': 'star', '★': 'star', '☆': 'star', '🎤': 'microphone-2', '⚠️': 'alert-triangle', '🚨': 'urgent', '📝': 'notes', '✅': 'circle-check', '❌': 'circle-x', '◐': 'circle-half-2', '👥': 'users', '⬇': 'download', '▶': 'chevron-right', '◀': 'chevron-left', '📦': 'package', '💵': 'report-money', '🪪': 'id', '🧠': 'brain', '🕸️': 'topology-star-3' };
+  const EMOJI = { '🏥': 'building-hospital', '🏛️': 'building-bank', '💰': 'coin', '🩺': 'stethoscope', '🧑‍⚕️': 'stethoscope', '👩‍⚕️': 'nurse', '💻': 'server-2', '⚖️': 'scale', '🙋': 'heart-handshake', '🤝': 'briefcase', '⏳': 'history', '⚡': 'bolt', '🩹': 'bandage', '🔁': 'refresh', '🧩': 'puzzle', '🚫': 'ban', '🎙️': 'microphone', '🔗': 'link', '🚪': 'door-exit', '📥': 'inbox', '🗄️': 'database', '🧭': 'compass', '📱': 'device-mobile', '🎓': 'school', '🎲': 'dice-5', '🔒': 'lock', '📣': 'speakerphone', '⭐': 'star', '★': 'star', '☆': 'star', '🎤': 'microphone-2', '⚠️': 'alert-triangle', '🚨': 'urgent', '📝': 'notes', '✅': 'circle-check', '❌': 'circle-x', '◐': 'circle-half-2', '👥': 'users', '⬇': 'download', '▶': 'chevron-right', '◀': 'chevron-left', '📦': 'package', '💵': 'report-money', '🪪': 'id', '📖': 'book-2', '🧠': 'brain', '🕸️': 'topology-star-3' };
   const EMOJI_FILL = ['⭐', '★'];
   const EMOJI_RE = new RegExp(Object.keys(EMOJI).sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gu');
   const iconize = (html) => String(html).replace(EMOJI_RE, (m) => ic(EMOJI[m], EMOJI_FILL.includes(m) ? 'fill' : ''));
@@ -119,7 +119,7 @@
       const again = i >= base.length;
       out.push({ ...a, t, crit: a.crit && !again, sub: again && !/RESENT/.test(a.sub) ? `${a.sub} · RESENT` : a.sub });
       const x = (t - STORM_START) / (CRASH_AT - STORM_START);
-      t += 0.5 + 2.9 * (1 - x) * (1 - x);
+      t += 0.4 + 2.3 * (1 - x) * (1 - x);
       i++;
     }
     return out;
@@ -478,17 +478,17 @@
   const SCRIPT = {
     physician: [
       { short: 'Find the tacrolimus level', task: "Find today's tacrolimus level.", probs: ['buried', 'find', 'ui'], gov: 'buried',
-        old: { html: '<p>Results: 26 components. No critical threshold was ever set for tacrolimus.</p>', rows: LAB_ROWS, answer: 17 },
+        old: { html: '<p>Results: 26 components. No critical threshold was ever set for tacrolimus.</p>', rows: LAB_ROWS, answer: 17, look: 'Find the line that starts with "Tacrolimus" and click it.' },
         fresh: { html: '<div class="sim-crit">Tacrolimus 19.4 ng/mL: CRITICAL (target 8 to 12)</div><div class="sim-crit">Potassium 6.2 mmol/L: CRITICAL</div><p>Paged to Dr. Raman at 13:02. The other 24 results are normal or unchanged.</p>', seq: ['Acknowledge'] } },
       { short: 'Confirm home medicines', task: 'Confirm what he takes at home.', probs: ['medrec', 'dupes'], gov: 'medrec',
         old: { html: '<p>Three sources disagree: an outside discharge list (warfarin, metformin), a scanned clinic letter (apixaban, insulin), and a pharmacy free-text note (ibuprofen at home).</p>', seq: ['Open list 1 of 3', 'Open list 2 (scanned image)', 'Open the pharmacy note', 'Reconcile by hand', 'Re-type 11 medications', 'Save'] },
         fresh: { html: '<p><b>One reconciled list.</b> Warfarin and metformin removed. Ibuprofen at home flagged as a kidney risk. Lactulose and rifaximin closed.</p>', seq: ['Confirm the list'] } },
       { short: "Read today's note", task: "Find what changed in today's note.", probs: ['bloat', 'copy'], gov: 'bloat',
-        old: { html: '<p>Progress note, 11 pages. Most of it was carried forward from admission.</p>', answer: 7,
+        old: { html: '<p>Progress note, 11 pages. Most of it was carried forward from admission.</p>', answer: 7, look: 'Click the one page that was written today. The others say copied, imported, or template.',
           rows: ['Page 1: History (copied from 09/22)', 'Page 2: Exam: "abdomen distended with fluid" (copied from 09/22)', 'Page 3: Medication list (imported)', 'Page 4: Labs 09/24 to 09/28 (imported)', 'Page 5: Imaging (imported)', 'Page 6: Plan items 1 to 6 (copied from 09/28)', 'Page 7: Plan item 7: "grade 2 encephalopathy, continue lactulose" (copied from 09/22)', 'Page 8: Fever 38.1, cultures sent, antibiotic started', 'Page 9: Billing statement (template)', 'Page 10: Quality attestations (template)', 'Page 11: Signature block'] },
         part: { html: '<p>The note is now 4 pages, and copied text shows its original date.</p>', seq: ["Scroll to today's changes", 'Sign'] },
         // The AI scribe's draft is short and mostly right. It also carries one error forward. Signing without reading has a cost.
-        fresh: { html: '<p><b>One page, drafted by the AI scribe from the bedside conversation.</b></p><div class="sim-note"><b>Today:</b> fever 38.1 at 10:30, cultures sent, piperacillin-tazobactam started. Tacrolimus 19.4, critical. Potassium 6.2.<br><b>Plan:</b> hold the 21:00 tacrolimus and recheck the level. Continue lactulose three times daily. Follow cultures. Target discharge October 2.</div>', any: true,
+        fresh: { html: '<p><b>One page, drafted by the AI scribe from the bedside conversation.</b></p><div class="sim-note"><b>Today:</b> fever 38.1 at 10:30, cultures sent, piperacillin-tazobactam started. Tacrolimus 19.4, critical. Potassium 6.2.<br><b>Plan:</b> hold the 21:00 tacrolimus and recheck the level. Continue lactulose three times daily. Follow cultures. Target discharge October 2.</div>', any: true, look: 'This note was drafted by the AI. Decide how to handle it.',
           rows: [
             { t: 'Sign the note', flag: 'signed_blind', say: 'Signed. One click.' },
             { t: 'Read it line by line before signing', flag: 'caught', say: 'You found it: "continue lactulose" is left over from his old liver. Corrected, then signed.' },
@@ -498,7 +498,7 @@
         part: { html: '<p>His medication history imported by itself. The 84-page fax is still a scanned image.</p>', seq: ['Open the fax', 'Next page', 'Give up'], miss: 'You never reached page 31: resistant E. coli, March 2026. Today\'s antibiotic does not cover it.' },
         fresh: { html: '<p><b>The outside records arrived as data.</b> Resistant <i>E. coli</i>, March 2026, is flagged on the antibiotic order. A contrast dye reaction was added to his allergies.</p>', seq: ['Switch to meropenem'] } },
       { short: "Find the kidney team's advice", task: "Find the kidney team's advice on tacrolimus.", probs: ['handoff', 'find'], gov: 'handoff',
-        old: { html: '<p>Eight consult notes, each under a different tab.</p>', answer: 4,
+        old: { html: '<p>Eight consult notes, each under a different tab.</p>', answer: 4, look: 'The kidney team is called Nephrology. Click their note.',
           rows: ['Consults tab: Cardiology 09/26', 'Consults tab: Infectious Disease 09/27', 'Ancillary tab: Nutrition 09/27', 'Consults tab: Endocrinology 09/28', 'Consults tab: Nephrology 09/28', 'Ancillary tab: Social Work 09/28', 'Pharmacy Notes tab: Transplant Pharmacy 09/29', 'Rehab tab: Physical Therapy 09/29'] },
         part: { html: '<p>Consult advice now sits beside the order it affects.</p>', seq: ['Open the tacrolimus order', 'Read the advice'] },
         fresh: { html: '<p><b>Shown on the order itself.</b> Nephrology, 09/28: hold the next dose if the level is above 12. Infectious disease, 09/27: fluconazole raises tacrolimus.</p>', seq: ['Got it'] } },
@@ -510,7 +510,7 @@
         part: { html: '<p>Fewer hard stops. The billing level is still yours to pick.</p>', seq: ['Close chart', 'Choose level of service'] },
         fresh: { html: '<p>The billing level and quality fields were filled in from the note.</p>', seq: ['Close chart'] } },
       { short: 'Find the pathology result', task: 'Find his pathology result in your inbox.', probs: ['inbox', 'buried'], gov: 'inbox',
-        old: { html: '<p>In Basket: 140 unread. Nothing is marked urgent.</p>', answer: 10,
+        old: { html: '<p>In Basket: 140 unread. Nothing is marked urgent.</p>', answer: 10, look: 'Click the pathology result for WHITFIELD.',
           rows: ['Refill request: sertraline (HALVORSEN)', 'Result: routine CBC (ADEYEMI)', 'Staff message: parking validation', 'Portal message: "what is the discharge date?"', 'Coding query: clarify "acute kidney injury"', 'Cosign needed: verbal orders x6', 'Result: chest x-ray (WHITFIELD)', 'Meeting invite: EHR optimization committee', 'Result: ECG (WHITFIELD)', 'Refill request: amlodipine (OKONKWO)', 'Result: surgical pathology (WHITFIELD)', 'Portal message: "is the fever serious?"', 'Survey: rate your EHR experience', '... 127 more'] },
         fresh: { html: '<p><b>Three urgent items on top:</b> pathology (a second tumor was found), ECG (QTc 492), chest x-ray. The other 137 went to the team pool.</p>', seq: ['Open pathology'] } },
       { short: 'Start the discharge', task: 'Get his discharge started.', probs: ['discharge'], gov: 'discharge',
@@ -523,13 +523,13 @@
     ],
     nurse: [
       { short: 'Check the noon labs', task: 'Check the noon labs before you give anything.', probs: ['buried', 'ui'], gov: 'buried',
-        old: { html: '<p>Results: 26 components. Find the one that should stop you.</p>', rows: LAB_ROWS, answer: 1 },
+        old: { html: '<p>Results: 26 components. One of them is dangerous.</p>', rows: LAB_ROWS, answer: 1, look: 'Find the potassium line and click it. A potassium above 6 is an emergency.' },
         fresh: { html: '<div class="sim-crit">Potassium 6.2 mmol/L: CRITICAL</div><p>The physician was paged at 13:02 and an ECG is ordered.</p>', seq: ['Acknowledge'] } },
       { short: 'Give the 12:30 insulin', task: 'Give the 12:30 insulin.', probs: ['clicks'], gov: 'clicks',
         old: { html: '<p>insulin lispro 8 units, glucose 312.</p>', seq: ['Scan patient band', 'Scan medication', 'Barcode not recognized: Override', 'Select override reason', 'Enter glucose value', 'Request second nurse', 'Witness unavailable: Bypass', 'Document injection site', 'Confirm dose', 'Sign'] },
         fresh: { html: '<p>insulin lispro 8 units, glucose 312. The scanner reads the first time.</p>', seq: ['Scan patient band', 'Scan insulin pen', 'Confirm 8 units'] } },
       { short: 'Decide what else is due', task: 'Decide what else is due and safe.', probs: ['medrec'], gov: 'medrec',
-        old: { html: '<p>Due at 13:00: a high-protein supplement drink (potassium 400 mg) and lactulose. A low-potassium diet order is also active.</p>', any: true,
+        old: { html: '<p>Due at 13:00: a high-protein supplement drink (potassium 400 mg) and lactulose. A low-potassium diet order is also active.</p>', any: true, look: 'Choose what you would do. Think about his potassium first.',
           rows: [{ t: 'Give the supplement drink', flag: 'supp' }, { t: 'Give the lactulose', flag: 'lact' }, { t: 'Hold both and call the physician' }] },
         fresh: { html: '<p>The supplement was stopped when the low-potassium diet was ordered. Lactulose was discontinued after the transplant.</p>', seq: ['Nothing else is due'] } },
       { short: 'Chart the vitals', task: 'Chart the 12:00 vital signs.', probs: ['dupes'], gov: 'dupes',
@@ -540,12 +540,12 @@
         part: { html: '<p>The duplicates are gone. Three assessments are still required every shift.</p>', seq: ['Fall risk score', 'Skin score', 'Pain reassessment'] },
         fresh: { html: '<p>The worklist shows only what changed this shift.</p>', seq: ['Confirm the 2 that changed'] } },
       { short: 'Find the tacrolimus plan', task: "Find the plan for tonight's tacrolimus.", probs: ['handoff'], gov: 'handoff',
-        old: { html: '<p>Four places describe the plan. They do not agree.</p>', answer: 3,
+        old: { html: '<p>Four places describe the plan. They do not agree.</p>', answer: 3, look: 'Click the advice from the kidney team (Nephrology). Theirs is the one that matters tonight.',
           rows: ['Surgery note: continue 4 mg twice daily', 'Night handoff: surgery "might change the tacrolimus"', 'Pharmacy: interaction review pending', 'Consults tab: Nephrology says hold if the level is above 12'] },
         part: { html: '<p>The care plan is shared between teams.</p>', seq: ['Open the care plan', 'Read it'] },
         fresh: { html: '<p><b>One plan, on the handoff screen:</b> hold tonight\'s tacrolimus if the level is above 12. Owner: Dr. Chen.</p>', seq: ['Acknowledge the plan'] } },
       { short: "Read the night nurse's note", task: "Check the night nurse's note for anything urgent.", probs: ['find'], gov: 'find',
-        old: { html: '<p>A free-text shift note. Physicians rarely open these.</p>', answer: 4,
+        old: { html: '<p>A free-text shift note. Physicians rarely open these.</p>', answer: 4, look: 'Click the line that describes a new symptom. The rest is routine.',
           rows: ['Slept in short stretches', 'Pain 2 to 4 out of 10, oxycodone at 01:15', 'Glucose 198 at 02:00', 'Fall precautions in place, call light within reach', 'Patient says his hands "feel shaky" holding a cup', 'One loose stool after lactulose', 'Labs drawn 05:40, sample clotted', 'Will continue to monitor'] },
         fresh: { html: '<p><b>Flagged from the night shift:</b> new hand tremor at 05:30, urine 26 mL per hour, page at 05:50 not answered.</p>', seq: ['Escalate to the physician'] } },
       { short: 'Confirm home medicines', task: 'Confirm his home medicines.', probs: ['interop'], gov: 'interop',
@@ -578,6 +578,29 @@
   }
   const LEVEL_TAG = { fresh: 'NEW', part: 'PARTLY FIXED', old: 'UNCHANGED' };
 
+  // How much work a version of a step takes, in plain words.
+  function effort(v) {
+    const parts = [];
+    if (v.rows) parts.push(v.any ? `choose 1 of ${v.rows.length}` : `find 1 line among ${v.rows.length}`);
+    if (v.seq) parts.push(`${v.seq.length} click${v.seq.length === 1 ? '' : 's'}`);
+    return parts.join(', then ');
+  }
+  const plainText = (html) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Which part of the deal fixed this step, or what would have.
+  function fixedBy(step) {
+    const d = simDeal();
+    if (d.pkg !== 'd' || coverage({ pkg: 'd', modules: [] }).full.has(step.gov)) return `Package ${PACKAGES[d.pkg].letter}`;
+    const mods = MODULES.filter((m) => m.fixes.includes(step.gov) && d.modules.includes(m.id)).map((m) => m.label);
+    return mods.length ? `the ${mods.join(' and ')} module` : `Package ${PACKAGES[d.pkg].letter}`;
+  }
+  function wouldFix(step) {
+    const pk = PACKAGE_ORDER.filter((id) => coverage({ pkg: id, modules: [] }).full.has(step.gov)).map((id) => PACKAGES[id].letter);
+    const mods = MODULES.filter((m) => m.fixes.includes(step.gov)).map((m) => (m.id === 'scribe' ? 'the AI scribe plus AI governance' : `the ${m.label.toLowerCase()} module`));
+    const options = [pk.length ? `Package ${pk.join(' or ')}` : '', mods.length ? `Package D with ${mods.join(' or ')}` : ''].filter(Boolean);
+    return options.join(', or ');
+  }
+
   function simList() {
     return SCRIPT[sim.side]
       .map((st, k) => {
@@ -588,27 +611,41 @@
       .join('');
   }
 
+  // The ending: one row per step, before against now.
   function simFinish() {
     const secs = Math.max(1, Math.round((sim.endedAt - sim.startedAt) / 1000));
     if (!sim.after) return `<div class="sim-card old"><h3>All ten steps done.</h3><p>Almost nobody gets here before the system goes down.</p></div>`;
     const steps = SCRIPT[sim.side];
     const count = (lv) => steps.filter((st) => simLevel(st) === lv).length;
     const d = simDeal();
-    const before = !S.isHost && S.you.ehr ? S.you.ehr.steps || 0 : null;
+    const before = S.isHost ? null : (S.you.ehr && S.you.ehr.steps) || 0;
     const bought = (id) => d.pkg === 'c' || (d.pkg === 'd' && d.modules.includes(id));
-    const also = d.pkg === 'keep' ? '' : `<ul class="sim-also">${['portal', 'migration', 'training'].map((id) => `<li class="${bought(id) ? 'yes' : 'no'}">${bought(id) ? '✓' : '✗'} ${esc(bought(id) ? MODULE[id].bought : MODULE[id].not)}</li>`).join('')}</ul>`;
+    const also = d.pkg === 'keep' ? '' : `<div class="sim-also-head">ALSO IN, OR MISSING FROM, YOUR DEAL</div><ul class="sim-also">${['portal', 'migration', 'training'].map((id) => `<li class="${bought(id) ? 'yes' : 'no'}">${bought(id) ? '✓' : '✗'} ${esc(bought(id) ? MODULE[id].bought : MODULE[id].not)}</li>`).join('')}</ul>`;
+    const rows = steps
+      .map((st, k) => {
+        const lv = simLevel(st);
+        return `<tr class="${lv}"><td>${k + 1}</td><td>${esc(st.short)}</td><td>${esc(effort(st.old))}</td><td>${lv === 'old' ? 'the same' : esc(effort(st[lv]))}</td><td><span class="sim-tag ${lv}">${LEVEL_TAG[lv]}</span></td></tr>`;
+      })
+      .join('');
     return `
       <div class="sim-card fresh sim-finish">
-        <h3>${ic('circle-check')} All ten steps done in ${secs} seconds and ${sim.clicks} clicks.</h3>
-        ${before !== null ? `<p>In the old system you finished <b>${before} of 10</b> before it crashed.</p>` : ''}
-        <p>Of the ten steps: <b>${count('fresh')}</b> new, <b>${count('part')}</b> partly fixed, <b>${count('old')}</b> unchanged.</p>
+        <h3>${ic('circle-check')} Done: all ten steps in ${secs} seconds.</h3>
+        <div class="sim-score">
+          <div><b>${before !== null ? `${before} of 10` : 'a few'}</b><span>steps finished in the old system before it crashed</span></div>
+          <div class="good"><b>${count('fresh')}</b><span>steps fixed by your deal</span></div>
+          <div class="warn"><b>${count('part')}</b><span>partly fixed</span></div>
+          <div class="bad"><b>${count('old')}</b><span>still the old system</span></div>
+        </div>
         ${sim.given.includes('signed_blind') ? `<p class="sim-miss">${ic('alert-triangle')} You signed the AI scribe's note without reading it. It kept him on lactulose, a drug he has not needed since the transplant. The note is yours now, not the AI's.</p>` : ''}
         ${sim.given.includes('caught') ? `<p class="sim-good">${ic('circle-check')} You read the AI scribe's draft and caught its error: it had kept him on lactulose, a drug he no longer needs.</p>` : ''}
         ${sim.misses.map((m) => `<p class="sim-miss">${ic('alert-triangle')} ${esc(m)}</p>`).join('')}
+        <table class="sim-table"><tr><th>#</th><th>Step</th><th>Before</th><th>Now</th><th>Result</th></tr>${rows}</table>
         ${also}
       </div>`;
   }
 
+  // One step on screen. Before the vote it is simply the old system. After the vote it is laid out as
+  // BEFORE (what this step used to take) against NOW (the screen to use), with one plain instruction.
   function simStage() {
     const steps = SCRIPT[sim.side];
     if (sim.i >= steps.length) return simFinish();
@@ -616,22 +653,49 @@
     const level = simLevel(step);
     const v = step[level];
     const picking = !!v.rows && !sim.found;
+    // After two wrong guesses the right line is pointed out: the system should be the obstacle, not the puzzle.
+    // Help exists only in the replay. Phase 1 is meant to be hard: no hints, no highlight, no click counts.
+    const help = sim.after;
+    const reveal = help && picking && !v.any && sim.wrong.length >= 2;
     const rows = v.rows
       ? `<div class="sim-rows">${v.rows
-          .map((r, i) => `<button class="sim-row ${sim.wrong.includes(i) ? 'no' : ''}" data-act="simrow" data-i="${i}">${esc(typeof r === 'string' ? r : r.t)}</button>`)
+          .map((r, i) => `<button class="sim-row ${sim.wrong.includes(i) ? 'no' : ''} ${reveal && i === v.answer ? 'hint' : ''}" data-act="simrow" data-i="${i}">${esc(typeof r === 'string' ? r : r.t)}</button>`)
           .join('')}</div>`
       : '';
     const seq = v.seq || [];
     const btn = !picking && sim.pos < seq.length
-      ? `<div class="sim-seq">${seq.length > 1 ? `<small>click ${sim.pos + 1} of ${seq.length}</small>` : ''}<button class="sim-btn" data-act="simnext">${esc(seq[sim.pos])}</button></div>`
+      ? `<div class="sim-seq"><button class="sim-btn" data-act="simnext">${esc(seq[sim.pos])}</button>${help && seq.length > 1 ? `<small>click ${sim.pos + 1} of ${seq.length}</small>` : ''}</div>`
       : '';
+    const todo = !help
+      ? picking ? (v.any ? 'Choose one.' : `Find the right line and click it.${sim.wrong.length ? ' <b>Wrong.</b>' : ''}`) : 'Press the button.'
+      : picking
+        ? `${esc(v.look || (v.any ? 'Choose one of the options below.' : 'Scroll the list and click the right line.'))}${reveal ? ' <b>It is highlighted for you now.</b>' : sim.wrong.length ? ' <b>Not that one. Try again.</b>' : ''}`
+        : seq.length > 1 ? `Press the button below. It takes ${seq.length} presses, and that is the point: count them.` : 'Press the button below.';
+    const work = `<p class="sim-todo">${ic('pointer')} <span><b class="sim-todo-label">What to do:</b> ${todo}</span></p>${v.html || ''}${rows}${btn}`;
+
+    if (!sim.after) {
+      return `
+        <div class="sim-card old">
+          <div class="sim-q"><span>Step ${sim.i + 1} of ${steps.length}</span></div>
+          <h3><span class="sim-yourtask">YOUR TASK</span> ${esc(step.task)}</h3>
+          ${work}
+        </div>`;
+    }
+    const about = `<p class="sim-about">This step is about: ${step.probs.map((id) => `<span class="pchip">${PROBLEM[id].n}. ${esc(PROBLEM[id].label)}</span>`).join('')}</p>`;
+    const verdict = level === 'fresh'
+      ? `${ic('circle-check')} <span><b>Fixed</b> by ${esc(fixedBy(step))}.</span>`
+      : level === 'part'
+        ? `${ic('circle-half-2')} <span><b>Partly fixed.</b> Shorter than before, with some manual work left. Fully fixed by ${esc(wouldFix(step))}.</span>`
+        : `${ic('circle-x')} <span><b>Not fixed by your deal.</b> This is the same screen as before. It would be fixed by ${esc(wouldFix(step))}.</span>`;
     return `
-      <div class="sim-card ${level === 'old' ? 'old' : 'fresh'}">
-        <div class="sim-q"><span>Step ${sim.i + 1} of ${steps.length}</span>${sim.after ? `<span class="sim-tag ${level}">${LEVEL_TAG[level]}</span>` : ''}</div>
-        <h3>${esc(step.task)}</h3>
-        ${v.html || ''}
-        ${picking ? `<p class="sim-hint">${v.any ? 'Choose one.' : 'Click the right line.'}</p>` : ''}
-        ${rows}${btn}
+      <div class="sim-compare">
+        <div class="sim-head"><span>Step ${sim.i + 1} of ${steps.length}</span><h3><span class="sim-yourtask">YOUR TASK</span> ${esc(step.task)}</h3></div>
+        <div class="sim-verdict ${level}">${verdict}</div>
+        <div class="sim-cols ${level === 'old' ? 'single' : ''}">
+          ${level === 'old' ? '' : `<div class="sim-before"><div class="sim-label">BEFORE · the old system</div><p>${esc(plainText(step.old.html))}</p><p class="sim-effort">It took: <b>${esc(effort(step.old))}</b></p></div>`}
+          <div class="sim-card ${level === 'old' ? 'old' : 'fresh'} sim-now"><div class="sim-label">${level === 'old' ? 'NOW · still the old system. Do it the old way.' : level === 'part' ? `NOW · shorter, but not finished · takes ${esc(effort(v))}` : `NOW · takes ${esc(effort(v))}`}</div>${work}</div>
+        </div>
+        ${about}
       </div>`;
   }
 
@@ -669,7 +733,11 @@
         sim.found = true;
         if (row && row.flag) sim.given.push(row.flag);
         if (row && row.say) toast(row.say);
-      } else if (!sim.wrong.includes(index)) sim.wrong.push(index);
+      } else {
+        if (!sim.wrong.includes(index)) sim.wrong.push(index);
+        // In the old system a wrong click is punished with one more pop-up that demands a reason.
+        if (!sim.after && ehr.active) ehr.queue.unshift({ title: 'Invalid selection', sub: 'The selected row cannot be opened from this screen. Override reason required.', reason: true });
+      }
     } else if (!(v.rows && !sim.found)) sim.pos++;
     if ((!v.rows || sim.found) && sim.pos >= (v.seq || []).length) simAdvance(v);
     renderSim();
@@ -709,7 +777,9 @@
     const modern = after && ['b', 'c', 'd'].includes(deal.pkg);
     const mine = !S.isHost && S.you.role === side;
     const cov = after ? coverage(deal) : null;
-    const who = S.isHost ? `The ${side}'s ten steps` : mine ? (after ? 'The same ten steps as before' : 'Ten steps. One minute.') : `You are watching the ${side}'s ten steps. ${after ? '' : esc(ROLES[S.you.role].observe)}`;
+    const who = after
+      ? `Same ten steps, in ${deal.pkg === 'keep' ? 'the unchanged old system' : 'the system your hospital bought'}.`
+      : S.isHost ? `The ${side}'s ten steps` : mine ? 'Ten steps. One minute. Follow the "What to do" line on each one.' : `Try the ${side}'s ten steps yourself. As you go: ${esc(ROLES[S.you.role].observe)}`;
     const title = !after
       ? 'MedCore Legacy 9.4.1'
       : deal.pkg === 'keep'
@@ -728,6 +798,7 @@
             : `<div class="ehr-titlebar">${esc(title)} · RIVERBEND UNIV HOSP · PRD<span class="ehr-lagtag"> (Not Responding)</span></div>
                <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Quality</span><span>Help</span></div>
                <div class="ehr-banner">${banner} | MRN RUH-4471902 | Attending: Raman, P MD | Allergies/Intolerances: 1 active (see Allergy activity) | Isolation: PROTECTIVE | Sepsis Risk: 0.71 HIGH | In Basket: 140 unread | Outside records: 1 new (Media)${after && cov ? ` | ${cov.full.size} of 15 problems fixed` : ''}</div>`}
+          ${after ? `<div class="sim-guide"><b>How to read this:</b> each step shows what it took <span class="g-before">before</span> and the screen you use <span class="g-now">now</span>. Do the step, then check its tag: <span class="sim-tag fresh">NEW</span> fixed, <span class="sim-tag part">PARTLY FIXED</span>, <span class="sim-tag old">UNCHANGED</span> not fixed by your deal.</div>` : ''}
           <div class="sim-body ${modern ? 'modern' : ''}">
             <ol class="sim-steps" data-simsteps></ol>
             <div class="sim-stage" data-simstage></div>
@@ -875,10 +946,65 @@
       </div>`;
   }
 
+  const VERDICT = { yes: 'SUPPORT', if: 'ONLY IF', no: 'OPPOSE', own: 'YOU SELL IT', rival: 'YOUR RIVAL' };
   function packageLines(key) {
+    const st = STANCE[key];
+    return `<div class="private plain"><div class="private-head">WHERE YOU STAND ON EACH PACKAGE</div>
+      ${PACKAGE_ORDER.map((id) => `<p class="brief-line"><span class="pkg-letter p${id}">${PACKAGES[id].letter}</span><span class="verdict v-${st[id][0]}">${VERDICT[st[id][0]]}</span><span>${st.best === id ? '<b>Your best choice.</b> ' : ''}${esc(st[id][1])}</span></p>`).join('')}
+      <p class="muted small">This is a starting position, not an order. You may be persuaded.</p></div>`;
+  }
+
+  // ---------- how to play, seat by seat ----------
+  function howToPlay() {
+    if (S.isHost) {
+      const part = (title, items) => `<div class="how-part"><div class="how-head">${title}</div><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol></div>`;
+      return `<div class="howto"><h2>📖 How to host</h2>
+        ${part('GETTING STARTED', ['Put this window on the projector.', 'Players open the address shown in the lobby, click <b>JOIN GAME</b>, and type the room code.', 'Each player taps <b>Assign me randomly</b>, or you click <b>RANDOMIZE EVERYONE BY THE SEAT PLAN</b>.', 'Click <b>BEGIN</b> when every seat has someone.'])}
+        ${part('DURING THE GAME', ['<b>NEXT</b> moves every screen forward. Players\' screens follow yours.', 'The <b>Facilitator</b> strip under the top bar tells you what to say and do in each part.', '<b>+1 MIN</b> and <b>RESTART TIMER</b> adjust the countdown. <b>BACK</b> returns one part.', 'In "Must fix", drag cards between the three columns as the room decides.', 'In "Replay", click through the ten steps yourself, and use the <b>Screen</b> and <b>System</b> buttons to compare packages.'])}
+        ${part('AT THE END', ['Click <b>FEEDBACK (CSV)</b> to download the forms before you close the game.', 'Closing the server ends the game. Nothing is saved.'])}
+      </div>`;
+    }
+    const key = S.you.role;
     const r = ROLES[key];
-    return `<div class="private plain"><div class="private-head">WHAT EACH PACKAGE MEANS FOR YOU</div>
-      ${PACKAGE_ORDER.map((id) => `<p class="brief-line"><span class="pkg-letter p${id}">${PACKAGES[id].letter}</span><span>${esc(r.brief[id])}</span></p>`).join('')}</div>`;
+    const g = GROUPS[r.group];
+    const clin = r.group === 'clinical';
+    const vendor = r.group === 'vendor';
+    const part = (phases, title, items) => `<div class="how-part ${phases.includes(S.phase) ? 'now' : ''}"><div class="how-head">${title}${phases.includes(S.phase) ? ' <span>YOU ARE HERE</span>' : ''}</div><ol>${items.filter(Boolean).map((i) => `<li>${i}</li>`).join('')}</ol></div>`;
+    const before = [
+      clin
+        ? '<b>Phase 1:</b> you use the old system. Read the "What to do" line on each step, then click. Dismiss every alert to keep going. You have one minute and ten steps.'
+        : `<b>Phase 1:</b> you watch the ${r.side} screen on your own device. ${esc(r.observe)}`,
+      '<b>Phase 2, on your own:</b> tap every problem you hit or saw. A tick appears.',
+      vendor
+        ? '<b>Phase 2, one list:</b> you may not speak. Your screen shows who starred each problem and which package or module fixes it.'
+        : `<b>Phase 2, one list:</b> tap the star on the three problems that matter most to ${g.short.toLowerCase()}.`,
+      vendor ? '' : '<b>Phase 2, must fix:</b> if you have a star beside your name, you are your team\'s representative. Drag cards between the three columns, or tap a card and then a column.',
+    ];
+    const pitch = vendor
+      ? ['The hospital presents its list first. Your two cue cards are on your screen.', 'When your package is highlighted you have one minute. Say three problems it fixes, the price and date, and one honest gap.', 'When your rival is pitching, your screen shows a line of attack. Save it for Phase 4.']
+      : ['Listen. Questions wait until Phase 4.', 'Each package card shows the price, what is left of the budget, how it switches on, what is not included, and the catch.', ...r.ask.slice(0, 2).map((q) => `Hold this question: ${esc(q)}`)];
+    const deal = vendor
+      ? ['Under "Only ' + esc(r.plural) + ' know", tap <b>Put on the table</b> beside an offer. It then appears on every ballot and on the big screen. You cannot take it back.', 'Visit the tables. Find out what each group needs before you offer anything.', 'You have no vote. You win when five hospital votes land on one of your packages.']
+      : [
+        'Under <b>Your position</b>, tap a package.',
+        'If you tapped D, tick the modules you want bought.',
+        'Tick the contract terms you want. A vendor\'s offer only appears after that vendor puts it on the table, so go and ask.',
+        `Watch the <b>YOUR DEAL</b> bar. Anything that pushes the contract over ${money(CAP)} is not bought.`,
+        key === 'finance' ? `<b>Only your team can approve the stretch to ${money(STRETCH_CAP)}.</b> A green card on your screen shows who is asking and a checklist. Tick the stretch only if it makes sense.` : '',
+        key === 'exec' || clin ? `If your deal is over budget, an amber card appears. Tick <b>Stretch the budget to ${money(STRETCH_CAP)}</b> and go to the finance table with a reason.` : '',
+        key === 'exec' ? 'With two minutes left, announce which deals go to the vote. Three at most.' : '',
+        'To publish one of your private facts to the whole room, tap <b>Tell the room</b> beside it.',
+        `<b>Phase 5:</b> the same ballot becomes your vote. ${g.short} cast ${g.votes === 2 ? '2 votes' : '1 vote'} as a block for whatever most of you choose. A deal needs ${PASS} of ${TOTAL_VOTES}.`,
+      ];
+    const after = ['The decision appears on every screen.', '<b>Replay:</b> do the same ten steps in the new system. Each step shows BEFORE and NOW, a "What to do" line, and a tag: NEW, PARTLY FIXED, or UNCHANGED.', 'Read what happened to your group, then answer six short questions.'];
+    return `<div class="howto"><h2>📖 How to play: ${esc(r.plural)}</h2>
+      <p class="how-goal"><b>Your goal:</b> ${esc(r.goal)}</p>
+      ${part([0, 1, 2], 'BEFORE THE VENDORS COME IN', before)}
+      ${part([3], 'WHEN THE VENDORS PITCH', pitch)}
+      ${part([4, 5], 'NEGOTIATION AND VOTE', deal)}
+      ${packageLines(key)}
+      ${part([6, 7], 'AFTER THE DECISION', after)}
+    </div>`;
   }
 
   const spokesperson = () => S.reps.nurse || S.reps.physician || S.reps.exec || null;
@@ -901,7 +1027,7 @@
       case 'p2_merge':
         lines = vendor
           ? ['Listen. Vendors may not speak in this phase.', 'Watch which group stars which problem. That is who you sell to.']
-          : ['Now talk, as one hospital. Compare what you noticed.', `Star the ${TOP_PICKS} problems that matter most to ${g.short.toLowerCase()}.`, ...r.raise];
+          : ['Now talk, as one hospital. Compare what you noticed.', `Star the ${TOP_PICKS} problems that matter most to ${g.short.toLowerCase()}. Each person stars on their own device.`, 'The top of the list shows the problems closest to your must-haves, and why. You may star others.', ...r.raise];
         break;
       case 'p2_top3':
         lines = vendor
@@ -931,10 +1057,33 @@
           ? ['You do not vote. Watch the room.']
           : ['Vote on your own device.', `${g.short} cast${g.votes === 2 ? ' 2 votes' : ' 1 vote'} as a block: the package most of you choose.`, 'Be ready to say your vote and one reason in 30 seconds.'];
         break;
+      case 'lobby':
+        lines = ['Read your role card below. It is your character for the whole game.', 'Tap "How to play your seat" for a step-by-step guide.', 'Then wait. The facilitator starts the game for everyone.'];
+        break;
+      case 'p6_decision':
+        lines = vendor
+          ? ['The hospital has decided. Find out if it chose one of your packages.', 'The CEO will announce it to you. Say out loud whether you accept.']
+          : role === 'exec'
+            ? ['Your CEO announces the decision to the vendors, out loud.', 'If no deal reached the votes it needed, your group decided. Explain why.', 'Check what the money did not cover. It is listed in red.']
+            : ['See which package won, and with how many votes.', 'Check which modules and terms made it in, and which the money did not cover (in red).', 'Listen for the vendors to accept or refuse.'];
+        break;
+      case 'p6_outcome':
+        lines = ['Find your own card. It is the first one, outlined.', 'Green lines are what your group won. Red lines are what it cost you.', 'Be ready to read your card to the room if you are asked.'];
+        break;
+      case 'p6_reflect':
+        lines = ['Answer the six questions on your own.', 'Your answers save as you type. There is no submit button.'];
+        break;
+      case 'debrief':
+        lines = ['Put your device down and join the discussion.', 'The questions are on the big screen.', 'You can still finish your feedback form below.'];
+        break;
+      case 'reveal_cards':
+      case 'reveal_point':
+        lines = ['Look at the big screen. There is nothing to click.'];
+        break;
       default:
         return '';
     }
-    return `<div class="coach"><div class="coach-head">${r.icon} YOUR JOB RIGHT NOW</div><ul>${lines.filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
+    return `<div class="coach"><div class="coach-head">${r.icon} YOUR JOB RIGHT NOW</div><ul>${lines.filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p class="coach-lost">Lost? Tap <b>How to play</b> at the top right for your full guide.</p></div>`;
   }
 
   // Vendor cue card: the three highest-ranked problems this package fixes, the price, and one honest gap.
@@ -1037,9 +1186,11 @@
         return `
           <div class="center narrow">
             <h1>Welcome, ${esc(displayName())}</h1>
+            ${coach()}
             <div class="eyebrow">YOUR SEAT: ${me.name}</div>
             ${roleCard(S.you.role)}
-            <p class="muted">This card is always one tap away: press your name at the top right.</p>
+            <p><button class="btn primary" data-act="howto">📖 How to play your seat, step by step</button></p>
+            <p class="muted">Your role card is one tap away at any time: press your name at the top right.</p>
             <p class="waiting">Waiting for the facilitator to begin<span class="dots"></span></p>
             <button class="btn ghost" data-act="rerole">Change seat</button>
           </div>`;
@@ -1240,6 +1391,7 @@
         return `
           <div class="center narrow reveal">
             ${bigTimer(!host)}
+            ${host ? '' : coach()}
             <div class="eyebrow">THE HOSPITAL HAS DECIDED</div>
             <div class="winner p${d.pkg}">
               <div class="winner-icon">${pkg.icon}</div>
@@ -1285,6 +1437,7 @@
         return `
           <div class="center reveal">
             ${bigTimer(!host)}
+            ${host ? '' : coach()}
             <div class="eyebrow">ONE YEAR LATER · ${esc(pkgTitle(d.pkg))}</div>
             <h1 class="huge">${esc(pkg.headline)}</h1>
             <div class="maria"><b>Mr. Whitfield, 13:02:</b> ${esc(pkg.whitfield)} ${extra.map(esc).join(' ')}</div>
@@ -1317,6 +1470,7 @@
         return `
           <div class="center narrow reveal">
             <div class="eyebrow">DEBRIEF</div>
+            ${host ? '' : coach()}
             <h1>Everyone agreed the EHR was broken.</h1>
             <h1 class="accent">So why was fixing it so hard?</h1>
             ${stepList([
@@ -1340,6 +1494,7 @@
         ];
         return `
           <div class="center">
+            ${S.isHost ? '' : coach()}
             <h1 class="huge">🎓 WHAT JUST HAPPENED?</h1>
             <div class="archs">
               ${cards
@@ -1360,6 +1515,7 @@
       case 'reveal_point':
         return `
           <div class="center narrow reveal point">
+            ${S.isHost ? '' : coach()}
             <div class="eyebrow">THE POINT</div>
             <h1>A better technology does not automatically create a better health-care system.</h1>
             <p class="lead">Successful innovation has to work with:</p>
@@ -1388,7 +1544,7 @@
       </label>`;
     return `
       <div class="${compact ? 'reflect compact' : 'center narrow reflect'}">
-        ${compact ? '<h2>Your feedback</h2>' : `${bigTimer(true)}<h1>FEEDBACK FORM</h1>`}
+        ${compact ? '<h2>Your feedback</h2>' : `${bigTimer(true)}<h1>FEEDBACK FORM</h1>${coach()}`}
         <p class="lead">1. You played: <b>${esc(GROUPS[S.you.group].name)}</b></p>
         <label class="field">2. Which EHR problem felt worst during the simulation?
           <select data-reflect="worst">
@@ -1450,6 +1606,7 @@
         </div>
         <div class="topright">
           <span class="timer hidden" data-timer></span>
+          <button class="chip howbtn" data-act="howto" title="How to play">📖 <span>How to play</span></button>
           ${right}
         </div>
       </header>
@@ -1558,34 +1715,36 @@
   // Package cards. None is highlighted by default; a card lifts when you hover or focus it.
   function pkgCards(current) {
     const critical = inTier(TIERS[0]);
-    return (
-      '<div class="pkgs">' +
-      '<div class="vendorhead">⏳ MEDCORE <small>the incumbent: the vendor you have today</small></div><div class="vendorhead rival">⚡ NORTHWIND <small>the challenger: wants to replace them</small></div>' +
-      PACKAGE_ORDER.map((id) => {
-        const pkg = PACKAGES[id];
-        const cov = coverage({ pkg: id, modules: [] });
-        const c = dealCost({ pkg: id });
-        const missed = critical.filter((p) => !cov.full.has(p.id));
-        return `
-          <div class="pkg p${id}" tabindex="0">
-            ${current === id ? '<div class="pitch-tag">NOW PITCHING</div>' : ''}
-            <div class="pkg-head"><span class="pkg-letter p${id}">${pkg.letter}</span><span>${pkg.icon} ${pkg.name}</span></div>
-            <p class="pkg-frame">${esc(pkg.frame)}</p>
-            <p class="pkg-tag">${esc(pkg.seller)}. ${esc(pkg.stance)}</p>
-            <div class="pkg-stats">
-              <div><small>PRICE</small><b>${money(pkg.price)}${id === 'd' ? '+' : ''}</b></div>
-              <div><small>LEFT OF ${money(CAP)}</small><b>${money(CAP - c.total)}</b></div>
-              <div><small>GO-LIVE</small><b>${pkg.months} mo</b></div>
-            </div>
-            <p class="pkg-fix"><b>${cov.full.size} of 15</b> problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}${id === 'd' ? ' (more with modules)' : ''}</p>
-            <ul class="pkg-features">${pkg.includes.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-            <p class="pkg-catch"><b>The catch:</b> ${esc(pkg.catchline)}</p>
-            <p class="pkg-meta">${esc(pkg.golive)} · ${esc(pkg.style)} · ${esc(pkg.hosting)} · training ${esc(pkg.training)}</p>
-            ${missed.length ? `<p class="pkg-miss">Must-fix left open: ${missed.map((p) => esc(p.label)).join(', ')}</p>` : '<p class="pkg-hit">Covers every must-fix problem.</p>'}
-          </div>`;
-      }).join('') +
-      '</div>'
-    );
+    const card = (id) => {
+      const pkg = PACKAGES[id];
+      const cov = coverage({ pkg: id, modules: [] });
+      const c = dealCost({ pkg: id });
+      const missed = critical.filter((p) => !cov.full.has(p.id));
+      const risky = /one day/i.test(pkg.style);
+      return `
+        <div class="pkg p${id}" tabindex="0">
+          ${current === id ? '<div class="pitch-tag">NOW PITCHING</div>' : ''}
+          <div class="pkg-head"><span class="pkg-letter p${id}">${pkg.letter}</span><span>${pkg.icon} ${pkg.name}</span></div>
+          <p class="pkg-frame">${esc(pkg.frame)}</p>
+          <p class="pkg-tag">${esc(pkg.stance)}</p>
+          <div class="pkg-stats">
+            <div><small>PRICE</small><b>${money(pkg.price)}${id === 'd' ? '+' : ''}</b></div>
+            <div><small>LEFT OF ${money(CAP)}</small><b>${money(CAP - c.total)}</b></div>
+            <div><small>GO-LIVE</small><b>${pkg.months} mo</b></div>
+          </div>
+          <p class="pkg-switch ${risky ? 'risky' : ''}"><b>How it switches on:</b> ${esc(pkg.style.toLowerCase())}, with ${esc(pkg.training)} of training</p>
+          <p class="pkg-fix"><b>${cov.full.size} of 15</b> problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}${id === 'd' ? ' (more with modules)' : ''}</p>
+          <ul class="pkg-features">${pkg.includes.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+          <p class="pkg-out"><b>Not included:</b> ${esc(pkg.leaves)}</p>
+          <p class="pkg-catch"><b>The catch:</b> ${esc(pkg.catchline)}</p>
+          <p class="pkg-meta">${esc(pkg.golive)} · ${esc(pkg.hosting)} · old records: ${esc(pkg.records.toLowerCase())}</p>
+          ${missed.length ? `<p class="pkg-miss">Must-fix left open: ${missed.map((p) => esc(p.label)).join(', ')}</p>` : '<p class="pkg-hit">Covers every must-fix problem.</p>'}
+        </div>`;
+    };
+    // Two rival vendors, each with its own pair of packages. The groups sit side by side on wide screens and stack on narrow ones.
+    const group = (seller, icon, line, cls) =>
+      `<div class="vendorgroup"><div class="vendorhead ${cls}">${icon} ${seller.toUpperCase()} <small>${line}</small></div>${PACKAGE_ORDER.filter((id) => PACKAGES[id].seller === seller).map(card).join('')}</div>`;
+    return `<div class="pkgs">${group('MedCore', '⏳', 'the incumbent: the vendor you have today', '')}${group('Northwind', '⚡', 'the challenger: wants to replace them', 'rival')}</div>`;
   }
 
   const DYN = {
@@ -1700,32 +1859,42 @@
       );
     },
 
-    // Star the three problems that matter most to your group.
+    // Star the three problems that matter most to your group. The ones closest to this seat's
+    // must-haves are listed first with the reason, so the choice is informed, but it stays the player's own.
     intra(el) {
       const role = S.you.role;
       const size = S.roleCounts[role];
       const mine = new Set(S.you.top);
       const full = mine.size >= TOP_PICKS;
-      const rows = [...PROBLEMS].sort(
-        (a, b) => (S.problems[b.id].reportsByRole[role] || 0) - (S.problems[a.id].reportsByRole[role] || 0) || a.n - b.n
+      const cares = CARES[role] || [];
+      const why = Object.fromEntries(cares);
+      const row = (p) => {
+        const b = S.problems[p.id];
+        const seen = b.reportsByRole[role] || 0;
+        const on = mine.has(p.id);
+        const detail = why[p.id]
+          ? `<small class="care-why">${esc(why[p.id])}</small>`
+          : `<small>${esc(p.desc)}</small>`;
+        return `
+          <button class="prow star ${on ? 'on' : ''} ${why[p.id] ? 'care' : ''}" data-act="top" data-id="${p.id}" ${!on && full ? 'disabled' : ''}>
+            <span class="prow-check">${on ? '★' : '☆'}</span>
+            <span><b>${p.n}. ${esc(p.label)}</b>${detail}<small>${seen ? `Logged by ${seen} of ${size} ${ROLES[role].plural.toLowerCase()}` : `No ${ROLES[role].short.toLowerCase()} logged this`} · ${b.reports} across the hospital</small></span>
+            <span class="prow-cat">${b.top ? `★ ${b.top}` : ''}</span>
+          </button>`;
+      };
+      const careIds = cares.map(([id]) => id);
+      const first = careIds.map((id) => PROBLEM[id]);
+      const rest = PROBLEMS.filter((p) => !careIds.includes(p.id)).sort(
+        (x, y) => (S.problems[y.id].reportsByRole[role] || 0) - (S.problems[x.id].reportsByRole[role] || 0) || x.n - y.n
       );
+      const suggested = careIds.every((id) => mine.has(id)) && mine.size === careIds.length;
       setHtml(
         el,
-        `<p class="muted small">${mine.size} of ${TOP_PICKS} stars used</p><div class="probs">` +
-          rows
-            .map((p) => {
-              const b = S.problems[p.id];
-              const seen = b.reportsByRole[role] || 0;
-              const on = mine.has(p.id);
-              return `
-              <button class="prow star ${on ? 'on' : ''}" data-act="top" data-id="${p.id}" ${!on && full ? 'disabled' : ''}>
-                <span class="prow-check">${on ? '★' : '☆'}</span>
-                <span><b>${p.n}. ${esc(p.label)}</b><small>${seen ? `Logged by ${seen} of ${size} ${ROLES[role].plural.toLowerCase()}` : `No ${ROLES[role].short.toLowerCase()} logged this`} · ${b.reports} across the hospital</small></span>
-                <span class="prow-cat">${b.top ? `★ ${b.top}` : ''}</span>
-              </button>`;
-            })
-            .join('') +
-          '</div>'
+        `<p class="muted small">${mine.size} of ${TOP_PICKS} stars used. This is your own choice, made on your own device.</p>
+         <div class="care-head"><span>CLOSEST TO YOUR SEAT'S MUST-HAVES</span>${first.length ? `<button class="btn sm" data-act="topsuggest" ${suggested ? 'disabled' : ''}>${suggested ? 'Starred' : 'Star these three'}</button>` : ''}</div>
+         <div class="probs">${first.map(row).join('')}</div>
+         <div class="care-head rest"><span>EVERYTHING ELSE YOU CAN STAR</span></div>
+         <div class="probs">${rest.map(row).join('')}</div>`
       );
     },
 
@@ -2192,6 +2361,10 @@
         S.you.report.problems = toggle(S.you.report.problems, el.dataset.id);
         render();
         return sendReport();
+      case 'topsuggest':
+        S.you.top = (CARES[S.you.role] || []).map(([id]) => id).slice(0, TOP_PICKS);
+        render();
+        return act('top', { problems: S.you.top });
       case 'top':
         S.you.top = toggle(S.you.top, el.dataset.id).slice(0, TOP_PICKS);
         render();
@@ -2227,6 +2400,16 @@
         return saveReflection(0);
       case 'export':
         return exportCsv();
+      case 'howto': {
+        const old = document.querySelector('.modal');
+        if (old) old.remove();
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.dataset.act = 'closemodal';
+        modal.innerHTML = iconize(`<div class="modal-box wide">${howToPlay()}<button class="btn" data-act="closemodal">Close</button></div>`);
+        document.body.appendChild(modal);
+        return;
+      }
       case 'showrole': {
         const modal = document.createElement('div');
         modal.className = 'modal';

@@ -47,7 +47,10 @@ One **representative** per seat is picked at random when the game starts (marked
 ## What every player sees
 
 - **A role card** (always one tap away on their name): goal, a line to say out loud, three must-haves, what they can trade, their red lines, and their leverage.
-- **"Your job right now"**: a strip at the top of every screen that says what to do in this part of this phase, in this seat.
+- **How to play** (button at the top right of every screen, and on the lobby card): a step-by-step guide written for that seat. It covers what to click before the vendors come in, during the pitches, in the negotiation and vote, and after the decision, and marks the part the game is in now. It also shows where that seat stands on each package: support, only if, or oppose, with the reason and what to tick. The host has a matching guide.
+- **"Your job right now"**: a strip on every player screen, from the lobby to the debrief, that says what to do in this part of this phase, in this seat. It ends with a pointer to the full guide for anyone who is lost.
+- **Phase 1 is hard on purpose**: each step names the task and nothing more. There are no hints about which line is right, no highlight, and no click counts.
+- **The replay in Phase 6 is guided**: under every package, each step has a "What to do" line that says what to look for (for example, "The kidney team is called Nephrology. Click their note."), and after two wrong guesses the right line is highlighted.
 - **Private facts**: the "only you know" list from the facilitator pack. From Phase 2 on, a player can publish any of them to the whole room. It appears on the projector under *The room now knows* and cannot be taken back.
 - **Vendor offers**: each vendor has private offers that apply only to its own packages. MedCore can offer free paging in 6 weeks, a $3M loyalty credit on B, and a capped penalty. Northwind can offer 8% off D, free AI governance, a $2M bridge alert layer, a waived exit fee, a refund, and a capped penalty. An offer appears on ballots only after that vendor puts it on the table, and the rival sees it too.
 - **Budget cues**: in Phase 4, executives and clinicians see a card prompting them to ask finance to stretch the budget, listing what the room wanted that the money did not cover. Finance sees a matching card with a checklist for deciding whether the stretch makes sense.
@@ -62,7 +65,7 @@ The host advances every screen with **NEXT**; players' screens follow. A **Facil
 | **1 · EHR Simulation** (1 min) | Read your task | Physicians and nurses get a task. Everyone else gets something to watch for | 0:45 |
 | | Use the EHR | Physicians and nurses each get the same ten scripted steps every time. Alerts start at second 4 and speed up; the system stops responding at second 54. Advances by itself | 1:00 |
 | **2 · Stakeholder Discussion** (10 min) | On your own | The two alerts that mattered are revealed, with how fast they were dismissed. Everyone ticks the problems they hit or saw | 3:00 |
-| | One list | The hospital talks. Each person stars the 3 problems that matter most to their group. Vendors listen and see which package answers each problem | 5:00 |
+| | One list | The hospital talks. Each person stars the 3 problems that matter most to their group, individually, on their own device. The three problems closest to that seat's must-haves are listed first with the reason, and one button stars all three. Vendors listen and see which package answers each problem | 5:00 |
 | | Must-fix and spokesperson | The 15 problems sit in Must fix / Should fix / Can wait. The facilitator and team representatives drag cards between columns | 2:00 |
 | **3 · Vendor Pitchfest** (6 min) | The hospital presents | The spokesperson presents the must-fix list. Vendors see their cue cards | 2:00 |
 | | Four pitches | MedCore pitches A then B, Northwind pitches C then D, one minute each with its own countdown. Each vendor sees a cue card for its own package and a line of attack while its rival speaks | 4:00 |
@@ -96,7 +99,7 @@ There is one frozen simulation per screen (physician and nurse). It is the same 
 
 Alerts interrupt throughout and must be dismissed to continue. The reveal shows how many of the ten steps each person finished before the crash, and which problems each step was hiding.
 
-**After the vote** players run the same ten steps again. Each step is rebuilt from the deal:
+**After the vote** players run the same ten steps again. A yellow strip at the top explains how to read the screen. Each step is laid out as **Before** (what the old system showed and how much work it took) beside **Now** (the screen to use, with a one-line "What to do"). A verdict line says whether the deal fixed the step and which package or module did it, or what would have. The ending is a scoreboard with one row per step: before, now, and result. Each step is rebuilt from the deal:
 
 - **New:** the problem behind that step is fixed, and the step takes one or two clicks.
 - **Partly fixed:** shorter, with some manual work left.

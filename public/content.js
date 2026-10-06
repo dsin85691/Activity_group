@@ -270,6 +270,99 @@
     },
   };
 
+  // ---------- which problems sit closest to each seat's must-haves ----------
+  // Shown while a player stars their three: [problem, why it matters from this seat]. A suggestion, never a rule.
+  const CARES = {
+    exec: [
+      ['alerts', 'Your must-have: the alert storm cannot happen again.'],
+      ['buried', 'A missed critical result is the harm the board will ask you about.'],
+      ['handoff', 'Three teams had three different plans. That is a leadership problem.'],
+    ],
+    finance: [
+      ['clicks', 'Minutes are money: ten clicks for one insulin dose, every dose, every shift.'],
+      ['dupes', 'You pay staff to type the same values into three screens.'],
+      ['docburden', 'Billing hard stops delay charges and lead to denied claims.'],
+    ],
+    physician: [
+      ['alerts', 'Your must-have: tiered alerts and critical result paging.'],
+      ['bloat', 'Eleven-page notes are why you chart for two hours every night.'],
+      ['inbox', '140 unread messages, and nothing marked urgent.'],
+    ],
+    nurse: [
+      ['alerts', 'Your must-have: tiered alerts and critical result paging.'],
+      ['dupes', 'Your must-have: chart once, not three times.'],
+      ['clicks', 'Ten steps to give a single insulin dose.'],
+    ],
+    it: [
+      ['alerts', 'Your must-have: alert limits and a backup that does not share queues.'],
+      ['interop', 'Your must-have: outside records and interfaces that actually connect.'],
+      ['find', 'Records scattered across tabs and scanned files are yours to support.'],
+    ],
+    compliance: [
+      ['ai', 'Your must-have: every AI tool needs an owner. The sepsis model had none.'],
+      ['buried', 'Your 60-day plan to the regulator must cover critical results.'],
+      ['copy', 'Copied notes describing exams nobody performed are a billing fraud risk.'],
+    ],
+    patients: [
+      ['discharge', 'Your must-have: nine discharge tasks in six places, and no plan the family could see.'],
+      ['handoff', 'Nobody could tell the Whitfields who was in charge of the plan.'],
+      ['buried', 'The family learned of the potassium by phone, three days before the portal showed it.'],
+    ],
+  };
+
+
+  // ---------- where each seat stands on each package ----------
+  // best: the package that serves this seat best. For each package: [verdict, why and what to tick].
+  // Verdicts: yes, if (only with conditions), no, own (you sell it), rival (your competitor sells it).
+  const STANCE = {
+    exec: { best: 'd',
+      a: ['no', 'You are back in this room in 2029 when MedCore ends support.'],
+      b: ['if', 'Only with a penalty clause and the clinicians on board. A one-day switch is the risk that ends careers.'],
+      c: ['if', 'Only if finance stretches the budget for the bridge, or the room accepts going without it.'],
+      d: ['yes', 'Fits the budget, goes live unit by unit, and every group can get something. Tick the patient seat and the March go-live.'] },
+    finance: { best: 'd',
+      a: ['if', 'A last resort. Cheap today, bought again in 2029.'],
+      b: ['if', 'The best price, but $6M of lost revenue is above your $5M reserve. Only with the $3M credit.'],
+      c: ['if', 'It leaves $1M for surprises. With the bridge it needs your signature on the stretch.'],
+      d: ['yes', 'The lowest cost after signing. Tick the 8% discount and the refund once Northwind offers them.'] },
+    physician: { best: 'c',
+      a: ['no', 'Your notes and inbox stay exactly as they are.'],
+      b: ['no', 'No scribe, no inbox triage, 8 hours of training, and a one-day switch.'],
+      c: ['yes', 'The AI scribe, inbox triage, and 16 hours of training are all included.'],
+      d: ['if', 'Only if the AI scribe, AI governance, inbox triage, and extended training are ticked.'] },
+    nurse: { best: 'c',
+      a: ['no', 'Insulin still takes ten clicks and vitals are still typed three times.'],
+      b: ['no', 'A one-day switch with 8 hours of training.'],
+      c: ['yes', 'Chart once, 16 hours of training, and a unit-by-unit go-live.'],
+      d: ['if', 'Only with extended training ticked and the go-live moved to March.'] },
+    it: { best: 'c',
+      a: ['no', 'MedCore ends support for it in December 2029.'],
+      b: ['no', 'Your servers, a one-day switch, and $5M missing from the price.'],
+      c: ['yes', 'Northwind rebuilds every interface and migrates 10 years of records.'],
+      d: ['if', 'Only with the interoperability hub ticked. Otherwise 23 interfaces are your job.'] },
+    compliance: { best: 'd',
+      a: ['if', 'Only with MedCore\'s free paging. It brings no AI oversight.'],
+      b: ['if', 'Only with MedCore\'s free paging. The sepsis model stays off.'],
+      c: ['if', 'Only with the bridge, which needs finance to stretch the budget. Ask for the exit fee to be waived.'],
+      d: ['yes', 'With AI governance (free for a reference site), the bridge, and the exit fee waived.'] },
+    patients: { best: 'c',
+      a: ['no', 'Nothing a patient or family would ever see.'],
+      b: ['no', 'Nothing patient-facing, and clinics are cut for five weeks.'],
+      c: ['yes', 'The discharge hub and the patient portal are both included.'],
+      d: ['if', 'Only with the discharge hub or the patient portal ticked. Always tick the patient seat.'] },
+    medcore: { best: 'b',
+      a: ['own', 'Your fallback. Quick, cheap, and it keeps the account.'],
+      b: ['own', 'Your prize. Lead with the price, the credit, and free paging.'],
+      c: ['rival', 'Attack the 20-month wait and the seven-year contract.'],
+      d: ['rival', 'Attack the modules that cost 15% more later.'] },
+    northwind: { best: 'c',
+      a: ['rival', 'Ask the room what happens when support ends in 2029.'],
+      b: ['rival', 'Ask about the one-day switch and whose servers it runs on.'],
+      c: ['own', 'Your prize. It fits the budget by $1M. Offer the bridge.'],
+      d: ['own', 'The deal most likely to pass. Your offers decide which modules fit.'] },
+  };
+
+
   // ---------- the 15 problems ----------
 
   const PROBLEMS = [
@@ -301,7 +394,7 @@
       price: 12, lost: 0.5, old: 0, months: 4, frame: 'Minimize disruption', stance: 'Solve the urgent problems. Accept the technical debt.', golive: 'February 2027', style: 'Software update', hosting: 'Hospital servers',
       training: '2 hours', records: 'Stay in place',
       includes: ['Alert tiers, limits, and duplicate suppression', 'Critical result paging', 'Separate backup queue'],
-      leaves: 'Notes, medication lists, outside records, inbox, and discharge stay as they are.',
+      leaves: 'Everything except alerts. Notes, medication lists, outside records, inbox, and discharge stay as they are.',
       catchline: 'Quick and cheap, and it leaves 13 of the 15 problems in place.',
       fixes: ['alerts', 'buried'], partial: ['ui', 'ai'],
       alertsAfter: 38,
@@ -325,8 +418,8 @@
       price: 34, lost: 6, old: 3.5, hidden: 5, months: 14, frame: 'Maximize value', stance: 'Solve most problems. Tolerate a risky one-day switch.', golive: 'March 2028', style: 'Whole hospital in one day', hosting: 'Hospital servers',
       training: '8 hours', records: '5 years',
       includes: ['Tiered alerts and one medication list', 'Single data entry and chart search', 'Cleaner screens', 'Basic outside record import'],
-      leaves: 'Inbox triage, discharge hub, AI governance, AI scribe, patient portal upgrade.',
-      catchline: 'A one-day switch for the whole hospital, with 8 hours of training.',
+      leaves: 'Inbox triage, discharge hub, AI governance, AI scribe, patient portal. MedCore sells no add-ons, so none of these can be bought later and the $11M left over buys nothing.',
+      catchline: 'The whole hospital switches in one day, on your own servers, built by the vendor whose system just crashed.',
       fixes: CORE_FULL, partial: ['bloat', 'copy', 'interop', 'docburden', 'handoff'],
       alertsAfter: 40,
       headline: 'New system, hard landing.',
@@ -349,7 +442,7 @@
       price: 44, lost: 4, old: 5, months: 20, frame: 'Transform completely', stance: 'Solve everything. Spend the whole budget and accept lock-in.', golive: 'April to September 2028', style: 'Unit by unit', hosting: 'Vendor cloud',
       training: '16 hours', records: '10 years',
       includes: ['Everything in B', 'Every module on the menu', 'Round-the-clock vendor support'],
-      leaves: 'Nothing on the list of 15 problems.',
+      leaves: 'Nothing. All 15 problems are covered.',
       catchline: 'It takes $44M of the $45M budget, the longest wait, and a seven-year contract. Nothing is left for surprises.',
       fixes: ALL_IDS, partial: [],
       alertsAfter: 12,
@@ -373,7 +466,7 @@
       price: 27, lost: 5, old: 3, months: 12, frame: 'Preserve flexibility', stance: 'Choose your priorities and phase the spending. Risk paying more in the end.', golive: 'January 2028', style: 'Unit by unit', hosting: 'Vendor cloud',
       training: '8 hours (16 with a module)', records: '3 years (10 with a module)',
       includes: ['Tiered alerts and one medication list', 'Single data entry and chart search', 'Cleaner screens', '20 critical interfaces rebuilt'],
-      leaves: 'Anything on the module menu that is not bought.',
+      leaves: 'Whatever you do not buy from the module menu: notes, outside records, inbox, discharge, AI oversight, the patient portal.',
       catchline: 'Modules bought later cost 15% more, and the default go-live falls in January.',
       fixes: CORE_FULL, partial: ['copy', 'handoff'],
       alertsAfter: 40,
@@ -517,7 +610,7 @@
 
   const CONTENT = {
     HOSPITAL, CAP, STRETCH_CAP, RESERVE, PASS, TOTAL_VOTES,
-    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, SELLERS, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS,
+    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, SELLERS, STANCE, CARES, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS,
     dealCost, coverage,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = CONTENT;
