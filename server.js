@@ -608,7 +608,18 @@ const MIME = {
 };
 
 function serveStatic(req, res, pathname) {
-  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  let rel;
+  try {
+    rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+  } catch {
+    // Malformed percent-encoding, usually from a scanner. Never let it take the server down.
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Bad request');
+  }
+  if (rel.includes('\0')) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Bad request');
+  }
   const file = path.resolve(PUBLIC, rel);
   if (file !== PUBLIC && !file.startsWith(PUBLIC + path.sep)) {
     res.writeHead(403);
@@ -621,9 +632,10 @@ function serveStatic(req, res, pathname) {
     }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+      'Content-Length': buf.length,
       'Cache-Control': 'no-cache',
     });
-    res.end(buf);
+    res.end(req.method === 'HEAD' ? undefined : buf);
   });
 }
 
@@ -703,19 +715,65 @@ async function handleApi(req, res, pathname) {
   sendJson(res, 404, { error: 'Not found.' });
 }
 
-const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/api/stream') return openStream(req, res, url.searchParams);
-  if (req.method === 'POST' && url.pathname.startsWith('/api/')) return handleApi(req, res, url.pathname);
-  if (req.method === 'GET') return serveStatic(req, res, url.pathname);
+// One request. Anything unexpected here is answered with an error instead of being allowed to crash the process:
+// a public address receives malformed requests from automated scanners within minutes of going live.
+function handleRequest(req, res) {
+  let url;
+  try {
+    url = new URL(req.url, 'http://localhost');
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    return res.end('Bad request');
+  }
+  const method = req.method;
+  // Keep-alive and health check. Free hosting tiers put a server to sleep when no requests arrive for a while,
+  // and a sleeping server forgets every game. Each open tab calls this every few minutes.
+  if ((method === 'GET' || method === 'HEAD') && url.pathname === '/api/ping') {
+    res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+    return res.end(method === 'HEAD' ? undefined : 'ok');
+  }
+  if (method === 'GET' && url.pathname === '/api/stream') return openStream(req, res, url.searchParams);
+  if (method === 'POST' && url.pathname.startsWith('/api/')) return handleApi(req, res, url.pathname);
+  if (method === 'GET' || method === 'HEAD') return serveStatic(req, res, url.pathname);
   res.writeHead(405);
   res.end();
+}
+
+const server = http.createServer((req, res) => {
+  req.on('error', () => {});
+  res.on('error', () => {});
+  try {
+    const out = handleRequest(req, res);
+    if (out && typeof out.catch === 'function') {
+      out.catch((err) => {
+        console.error('request failed:', req.method, req.url, err && err.message);
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
+    }
+  } catch (err) {
+    console.error('request failed:', req.method, req.url, err && err.message);
+    try {
+      if (!res.headersSent) res.writeHead(500);
+      res.end();
+    } catch { /* connection already gone */ }
+  }
 });
+// A malformed request line never reaches the handler above. Close it quietly.
+server.on('clientError', (err, socket) => {
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+});
+
+// Last line of defence: a game in progress lives in this process's memory, so log and keep running.
+process.on('uncaughtException', (err) => console.error('uncaught exception (server kept running):', err && err.stack));
+process.on('unhandledRejection', (err) => console.error('unhandled rejection (server kept running):', err && (err.stack || err)));
 
 // Keep idle SSE connections alive through proxies, and drop stale rooms.
 setInterval(() => {
   for (const room of rooms.values()) {
-    for (const c of room.clients) c.res.write(': ping\n\n');
+    for (const c of room.clients) {
+      try { c.res.write(': ping\n\n'); } catch { /* that tab has gone */ }
+    }
     if (Date.now() - room.createdAt > ROOM_TTL_MS && room.clients.size === 0) {
       clearTimeout(room.autoTimer);
       rooms.delete(room.code);
@@ -723,7 +781,7 @@ setInterval(() => {
   }
 }, 20000).unref();
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log('\n  FIX THE HOSPITAL is running.\n');
   console.log(`  On this computer:   http://localhost:${PORT}`);
   for (const url of lanUrls()) console.log(`  On the same Wi-Fi:  ${url}`);
