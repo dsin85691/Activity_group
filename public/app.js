@@ -1,18 +1,12 @@
 (() => {
   'use strict';
 
-  const {
-    HOSPITAL, CAP, STRETCH_CAP, RESERVE, PASS, TOTAL_VOTES,
-    GROUP_ORDER, GROUPS, ROLE_ORDER, ROLES, SELLERS, STANCE, CARES, PROBLEMS, PACKAGE_ORDER, PACKAGES, MODULES, TERMS, dealCost, coverage,
-  } = window.CONTENT;
+  const C = window.CONTENT;
+  const { GROUPS, VOTING_GROUPS, ROLE_ORDER, ROLES, GROUP_BRIEF, PROBLEMS, BUDGET, PACKAGE_ORDER, PACKAGES, COMBOS, FINANCE_ASKS } = C;
+  const { QUIZ, QUIZ_SECONDS, QUIZ_ANSWER_SECONDS, RANK_PICKS, HAPPY_ENDING, SIM } = C;
   const PROBLEM = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
-  const MODULE = Object.fromEntries(MODULES.map((m) => [m.id, m]));
-  const TERM = Object.fromEntries(TERMS.map((t) => [t.id, t]));
-  const SECRET = {};
-  for (const role of ROLE_ORDER) for (const sec of ROLES[role].secrets) SECRET[sec.id] = { ...sec, role };
-  const BALLOT_ORDER = [...PACKAGE_ORDER, 'keep'];
-  const VOTING_GROUPS = GROUP_ORDER.filter((g) => GROUPS[g].votes > 0);
-  const TOP_PICKS = 3;
+  const CLUE = Object.fromEntries(SIM.CLUES.map((c) => [c.id, c]));
+  const QUIZ_PROBLEMS = new Set(QUIZ.flatMap((q) => q.problems));
 
   // ---------- icons ----------
   // Tabler outline icons replace every emoji. Source text still uses the emoji as a readable marker;
@@ -33,122 +27,23 @@
   document.documentElement.dataset.theme = theme;
 
   const PHASE_TITLES = {
-    1: 'EHR SIMULATION', 2: 'STAKEHOLDER DISCUSSION', 3: 'VENDOR PITCHFEST',
-    4: 'NEGOTIATION', 5: 'VOTING', 6: 'DECISION & OUTCOME',
+    1: 'SIMULATION AND CRASH', 2: 'DID YOU SPOT IT?', 3: 'STAKEHOLDER DISCUSSION',
+    4: 'HANDSHAKE AND PITCH FEST', 5: 'DISCUSSION, VOTING AND DECISION', 6: 'OUTCOME',
   };
-  // What each step is called on the timer, so every part of a phase is labeled.
-  const STEP_LABEL = {
-    p1_intro: 'Read your task', p1_ehr: 'Use the EHR', p2_notes: 'Part 1 of 3 · on your own', p2_merge: 'Part 2 of 3 · one list',
-    p2_top3: 'Part 3 of 3 · must-fix and spokesperson', p3_hospital: 'Part 1 of 2 · the hospital presents', p3_pitch: 'Part 2 of 2 · four pitches',
-    p4_intra: 'Part 1 of 2 · inside your team', p4_inter: 'Part 2 of 2 · across teams', p5_vote: 'Vote', p6_decision: 'Part 1 of 4 · the decision',
-    p6_sim: 'Part 2 of 4 · replay', p6_outcome: 'Part 3 of 4 · consequences', p6_reflect: 'Part 4 of 4 · feedback form',
-  };
-  const TIERS = [
-    { k: 'critical', label: 'MUST FIX', hint: 'The hospital will not sign without these' },
-    { k: 'desirable', label: 'SHOULD FIX', hint: 'Worth paying for' },
-    { k: 'lower', label: 'CAN WAIT', hint: 'Live with it for now' },
-  ];
-
-  // ---------- the simulation's clock and its alerts ----------
-
-  // One scripted minute, identical on every run. Alerts begin at second 4, come faster and faster,
-  // and the system stops responding at second 54. Nobody finishes the ten steps.
-  const SIM_LENGTH = 60;
-  const STORM_START = 4;
-  const LAG_START = 44;
-  const CRASH_AT = 54;
-
-  const STORM = {
-    physician: [
-      { title: 'New result available: BASIC METABOLIC PANEL', sub: 'Collected 08:20 · Resulted 13:02' },
-      { title: 'Renal dosing: valganciclovir', sub: 'Creatinine changed. Review dose.', reason: true },
-      { title: 'Penicillin allergy: piperacillin-tazobactam ordered', sub: 'Reaction: rash, childhood. Override reason required.', reason: true },
-      { title: 'Renal dosing: piperacillin-tazobactam', sub: 'Creatinine changed. Review dose.' },
-      { title: 'QT prolongation: sertraline + ondansetron', sub: 'Consider ECG monitoring', reason: true },
-      { title: 'Renal dosing: trimethoprim-sulfamethoxazole', sub: 'Creatinine changed. Review dose.' },
-      { title: 'Sepsis risk: HIGH (0.71)', sub: 'Predictive model v2.3. Consider sepsis bundle.' },
-      { title: 'Duplicate therapy: insulin glargine + insulin lispro', sub: 'Two insulin products are active' },
-      { title: 'Renal dosing: magnesium oxide', sub: 'Creatinine changed. Review dose.' },
-      { title: 'Discharge medication reconciliation incomplete', sub: 'HARD STOP: required before discharge', reason: true },
-      { title: 'Drug interaction: fluconazole + tacrolimus', sub: 'Fluconazole may increase tacrolimus level', crit: true, reason: true },
-      { title: 'Renal dosing: fluconazole', sub: 'Creatinine changed. Review dose.' },
-      { title: 'New result available: TACROLIMUS LEVEL', sub: 'Collected 08:20 · Resulted 13:02 · Flag: H' },
-      { title: 'Drug interaction: tacrolimus + trimethoprim-sulfamethoxazole', sub: 'Both may raise potassium' },
-      { title: 'Quality measure: VTE prophylaxis documentation', sub: '7 fields incomplete' },
-      { title: 'Renal dosing: heparin', sub: 'Creatinine changed. Review dose.' },
-      { title: 'Sepsis risk: HIGH (0.71)', sub: 'Predictive model v2.3. Consider sepsis bundle.' },
-      { title: 'In Basket: 12 new messages', sub: '140 unread' },
-      { title: 'Renal dosing: pantoprazole', sub: 'Creatinine changed. Review dose.' },
-      { title: 'Health maintenance: influenza vaccine due', sub: 'Last documented: 10/2024' },
-      { title: 'New result available: BASIC METABOLIC PANEL', sub: 'RESENT by lab interface · Resulted 13:02' },
-      { title: 'Critical value: potassium 6.2', sub: 'Acknowledge to continue', reason: true },
-    ],
-    nurse: [
-      { title: 'New result available: BASIC METABOLIC PANEL', sub: 'Collected 08:20 · Resulted 13:02' },
-      { title: 'Pain reassessment overdue', sub: 'Oxycodone given 01:15. Reassessment not charted.' },
-      { title: 'Duplicate therapy: insulin glargine + insulin lispro', sub: 'Two insulin products are active', reason: true },
-      { title: 'Intake & output not charted', sub: 'Current shift' },
-      { title: 'Braden skin assessment due', sub: 'Required every shift' },
-      { title: 'Sepsis risk: HIGH (0.71)', sub: 'Predictive model v2.3. Notify provider.' },
-      { title: 'Penicillin allergy: piperacillin-tazobactam running', sub: 'Reaction: rash, childhood', reason: true },
-      { title: 'Patient education not documented', sub: 'Topic: transplant medications, session 3 of 4' },
-      { title: 'Critical lab: potassium 6.2', sub: 'Due now: high-protein supplement (potassium 400 mg)', crit: true, reason: true },
-      { title: 'Central line dressing: verify date', sub: 'Last changed 09/27' },
-      { title: 'Discharge medication reconciliation incomplete', sub: 'HARD STOP: required before discharge' },
-      { title: 'Vital signs: duplicate task', sub: 'Appears on two worklists' },
-      { title: 'Renal dosing: magnesium oxide', sub: 'Creatinine changed. Notify provider.' },
-      { title: 'Scanner battery low', sub: 'Dock device at end of shift' },
-      { title: 'Fall risk reassessment due', sub: 'Morse score required every shift' },
-      { title: 'Sepsis risk: HIGH (0.71)', sub: 'Predictive model v2.3. Notify provider.' },
-      { title: 'Care plan needs update', sub: 'Last updated: 26 hours ago' },
-      { title: 'Acetaminophen: 1,950 of 2,000 mg daily limit', sub: 'Next PRN dose will exceed limit' },
-      { title: 'New result available: BASIC METABOLIC PANEL', sub: 'RESENT by lab interface · Resulted 13:02' },
-      { title: 'Hourly rounding not documented', sub: 'Last charted: 12:00' },
-      { title: 'Incentive spirometry teaching due', sub: 'Required once per shift' },
-      { title: 'Interpreter need not assessed', sub: 'Admission requirement' },
-    ],
+  const STEP_TITLES = {
+    p1_intro: 'Read your brief', p1_sim: 'Bed 14', p2_quiz: 'Quiz', p2_rank: 'Top five',
+    p3_discuss: 'Discussion', p4_handshake: 'Handshake', p4_pitch: 'Pitch fest',
+    p5_framing: 'Finance framing', p5_intra: 'Team discussion', p5_inter: 'All-team discussion',
+    p5_vote: 'Voting', p5_decision: 'Decision', p6_replay: 'The replay', p6_wrap: 'Next cycle',
   };
 
-  function buildAlerts(side) {
-    const base = STORM[side];
-    const out = [];
-    let t = STORM_START;
-    let i = 0;
-    while (t < CRASH_AT - 0.5) {
-      const a = base[i % base.length];
-      const again = i >= base.length;
-      out.push({ ...a, t, crit: a.crit && !again, sub: again && !/RESENT/.test(a.sub) ? `${a.sub} · RESENT` : a.sub });
-      const x = (t - STORM_START) / (CRASH_AT - STORM_START);
-      t += 0.4 + 2.3 * (1 - x) * (1 - x);
-      i++;
-    }
-    return out;
-  }
-  const ALERTS = { physician: buildAlerts('physician'), nurse: buildAlerts('nurse') };
-  const critNumber = (side) => ALERTS[side].findIndex((a) => a.crit) + 1;
-
-  const SIM = {
-    physician: {
-      brief: 'Mr. Whitfield is 6 days out from a liver transplant and his labs just posted. You have ten steps: find his tacrolimus level, check his records, hold tonight\'s dose, and close the chart.',
-      missed: '⚠️ <b>Drug interaction: fluconazole + tacrolimus</b>. Fluconazole may increase tacrolimus level.',
-      lookalike: 'Health maintenance: influenza vaccine due',
-      truth: 'Tacrolimus was <b>19.4</b> (target 8 to 12), on line 18 of 26 with a small "H". Potassium was <b>6.2</b>. Tonight\'s dose had to be <b>held</b>.',
-    },
-    nurse: {
-      brief: 'You are behind. You have ten steps: check Mr. Whitfield\'s labs, give his 12:30 insulin and whatever else is safe, chart his vitals, and clear your documentation.',
-      missed: '⚠️ <b>Critical lab: potassium 6.2</b>. Due now: <b>high-protein supplement (potassium 400 mg)</b>.',
-      lookalike: 'Scanner battery low',
-      truth: 'His potassium was <b>6.2</b>, a medical emergency. The supplement drink adds potassium. The lactulose treats a condition his new liver no longer has.',
-    },
-  };
-
-  // ---------- state ----------
+  // ---------- state and helpers ----------
 
   const app = document.getElementById('app');
   const toastEl = document.getElementById('toast');
   const esc = (s) =>
     String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const money = (m) => `$${(Math.round(m * 10) / 10).toFixed(1).replace(/\.0$/, '')}M`;
+  const money = (m) => `$${m}M`;
   const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0);
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -200,6 +95,84 @@
     });
   }
 
+  // A small renderer for the brief set's markdown: headings, tables, lists, bold and paragraphs.
+  function md(src) {
+    const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    const cells = (row) => row.split('|').slice(1, -1).map((c) => c.trim());
+    const isList = (l) => /^(- |\d+\. )/.test(l);
+    const lines = src.split('\n');
+    let html = '';
+    for (let i = 0; i < lines.length;) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      if (line.startsWith('# ')) { html += `<h2>${inline(line.slice(2))}</h2>`; i++; continue; }
+      if (line.startsWith('## ')) { html += `<h3>${inline(line.slice(3))}</h3>`; i++; continue; }
+      if (line.startsWith('|')) {
+        const rows = [];
+        while (i < lines.length && lines[i].startsWith('|')) rows.push(lines[i++]);
+        const [head, , ...body] = rows;
+        html += `<table><tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join('')}</tr>${body.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table>`;
+        continue;
+      }
+      if (isList(line)) {
+        const tag = /^\d/.test(line) ? 'ol' : 'ul';
+        const items = [];
+        while (i < lines.length && isList(lines[i])) items.push(lines[i++].replace(/^(- |\d+\. )/, ''));
+        html += `<${tag}>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</${tag}>`;
+        continue;
+      }
+      const para = [];
+      while (i < lines.length && lines[i].trim() && !/^(#|\|)/.test(lines[i]) && !isList(lines[i])) para.push(lines[i++]);
+      html += `<p>${inline(para.join(' '))}</p>`;
+    }
+    return html;
+  }
+
+  // Briefs arrive from the server: a player gets only their own (and their group's); the facilitator gets all.
+  const briefs = { key: null, briefs: {}, phases: [], catches: {}, loading: false };
+  function loadBriefs() {
+    const key = session ? (session.hostKey ? 'host' : `${session.id}:${S && S.you ? S.you.role : ''}`) : null;
+    if (!key || key === briefs.key || briefs.loading) return;
+    if (!session.hostKey && !(S && S.you && S.you.role)) return;
+    briefs.loading = true;
+    const who = session.hostKey ? { hostKey: session.hostKey } : { id: session.id };
+    api('/api/briefs', { code: session.code, ...who })
+      .then((res) => {
+        Object.assign(briefs, { key, briefs: res.briefs || {}, phases: res.phases || [], catches: res.catches || {} });
+        screenKey = null; // redraw the screen with the brief in it
+        render();
+      })
+      .catch(() => {})
+      .finally(() => { briefs.loading = false; });
+  }
+  const BRIEFS = new Proxy({}, { get: (_, role) => briefs.briefs[role] });
+
+  // One "## Heading" section of a brief, as markdown.
+  function briefSection(role, heading) {
+    const src = BRIEFS[role] || '';
+    const start = src.indexOf(`## ${heading}`);
+    if (start < 0) return '';
+    const rest = src.slice(start + heading.length + 3);
+    const end = rest.indexOf('\n## ');
+    return end < 0 ? rest : rest.slice(0, end);
+  }
+
+  const briefHtml = (role) => (BRIEFS[role] ? `<div class="brief">${md(BRIEFS[role])}</div>` : '<p class="muted">Loading your brief…</p>');
+  // Physicians and nurses also hold the clinical end users' brief once leadership gets involved.
+  function myBriefs(withGroup) {
+    const role = S.you.role;
+    const group = withGroup && GROUP_BRIEF[role];
+    return briefHtml(role) + (group ? `<details class="recall"><summary>Your group's brief: ${esc(GROUPS[3].name)}</summary>${briefHtml(group)}</details>` : '');
+  }
+
+  const choiceTitle = (key) => C.choiceLetters(key).map((l) => `${l}. ${PACKAGES[l].name}`).join(' + ');
+  const choiceShort = (key) => C.choiceLetters(key).join(' + ');
+  const problemChip = (id, cls) => `<span class="pchip ${cls || ''}">${id} · ${esc(PROBLEM[id].label)}</span>`;
+  const mySimSide = () => ROLES[S.you.role].sim;
+  const myGroup = () => ROLES[S.you.role].group;
+  const isVoter = () => VOTING_GROUPS.includes(myGroup());
+  const displayName = () => (S.you.role === 'physician' ? `Dr. ${S.you.name}` : S.you.name);
+
   // ---------- connection ----------
 
   function connect() {
@@ -212,9 +185,7 @@
       setOnline(true);
       render();
     };
-    es.addEventListener('gone', () => {
-      leave('That game is no longer running.');
-    });
+    es.addEventListener('gone', () => leave('That game is no longer running.'));
     es.onerror = () => setOnline(false);
   }
 
@@ -226,12 +197,13 @@
   function leave(message) {
     if (es) es.close();
     es = null;
-    if (session && session.hostKey) store.del(localStorage, 'fth_host');
-    store.del(sessionStorage, 'fth_session');
+    if (session && session.hostKey) store.del(localStorage, 'b14_host');
+    store.del(sessionStorage, 'b14_session');
     session = null;
     S = null;
     screenKey = null;
-    ehrStop();
+    briefs.key = null;
+    simStop();
     homeView = 'home';
     homeError = message || '';
     setOnline(true);
@@ -240,8 +212,8 @@
 
   function startSession(next) {
     session = next;
-    store.set(sessionStorage, 'fth_session', session);
-    if (session.hostKey) store.set(localStorage, 'fth_host', session);
+    store.set(sessionStorage, 'b14_session', session);
+    if (session.hostKey) store.set(localStorage, 'b14_host', session);
     connect();
   }
 
@@ -249,7 +221,7 @@
 
   function renderHome() {
     document.body.className = 'home';
-    const savedHost = store.get(localStorage, 'fth_host');
+    const savedHost = store.get(localStorage, 'b14_host');
     const prefill = new URLSearchParams(location.search).get('room') || '';
     let body;
     if (homeView === 'join') {
@@ -274,14 +246,14 @@
     }
     app.innerHTML = `
       <main class="home-wrap">
-        <div class="home-title"><span class="home-icon">🏥</span> FIX THE HOSPITAL</div>
+        <div class="home-title"><span class="home-icon">🏥</span> BED 14</div>
         <svg class="ecg" viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true">
           <polyline points="0,30 120,30 140,30 155,10 170,50 185,2 200,58 215,30 240,30 360,30 380,30 395,10 410,50 425,2 440,58 455,30 480,30 600,30"/>
         </svg>
-        <p class="home-lead"><b>${HOSPITAL}, five days after the alert storm.</b></p>
-        <p class="home-copy">The EHR fired 347 alerts in three minutes on one transplant patient, then crashed the whole hospital for 47 minutes. A critical potassium went untreated.</p>
-        <p class="home-copy">Two vendors say they can fix it. The board wants a decision today.</p>
-        <p class="home-lead">Seven groups. Four packages. $45 million. Five votes needed.</p>
+        <p class="home-lead"><b>Riverbend University Hospital, September 29, 12:45.</b></p>
+        <p class="home-copy">James Whitfield is six days past a liver transplant, and every clue about what is going wrong sits on a different screen.</p>
+        <p class="home-lead">Live the EHR overload, name what broke, then choose and fund the fix.</p>
+        <p class="home-copy small">CIS 7000 · Health Tech · Fictional teaching case, not for clinical use</p>
         ${homeError ? `<p class="error">${esc(homeError)}</p>` : ''}
         ${body}
       </main>`;
@@ -294,12 +266,14 @@
 
   function remainingMs() {
     if (!S || !S.timerEnd) return null;
+    if (S.paused) return S.pausedMs;
     return Math.max(0, S.timerEnd - (Date.now() + clockOffset));
   }
-  const elapsedSec = () => {
+  // Seconds since the current step started.
+  function stepElapsed() {
     const ms = remainingMs();
     return ms === null ? 0 : (S.timerTotal || 0) - ms / 1000;
-  };
+  }
 
   function clock(ms) {
     const total = Math.ceil(ms / 1000);
@@ -322,851 +296,865 @@
       el.classList.toggle('low', ms > 0 && ms <= 10000);
       el.classList.toggle('done', ms === 0);
     });
-    if (S && S.step === 'p3_pitch') {
-      document.querySelectorAll('[data-dyn^="pitch"]').forEach((el) => DYN[el.dataset.dyn](el));
-      const left = ms === null ? 0 : Math.max(0, ms - (PACKAGE_ORDER.length - 1 - pitchIndex()) * 60000);
-      document.querySelectorAll('[data-subtimer]').forEach((el) => {
-        el.textContent = clock(left);
-      });
+    if (S) {
+      const left = (ms || 0) / 1000 + S.sessionAfter;
+      const total = Math.round(S.sessionTotal / 60);
+      const label = `Session ${clock(left * 1000)} left · total ${total} min${S.overtime ? ' · over time' : ''}${S.paused ? ' · PAUSED' : ''}`;
+      document.querySelectorAll('[data-session]').forEach((el) => { el.textContent = label; el.classList.toggle('over', !!S.overtime); });
+      substepTick();
+      pitchTick();
     }
-    if (S && S.step === 'p1_ehr' && S.isHost) document.querySelectorAll('[data-dyn="ehrhost"]').forEach((el) => DYN.ehrhost(el));
-    if (S && S.step === 'p4_inter') {
-      // The executives close the ballot two minutes before the end.
-      document.querySelectorAll('[data-checkpoint]').forEach((el) => {
-        const toGo = ms === null ? 0 : ms - 120000;
-        el.textContent = toGo > 0 ? `Executives announce the ballot in ${clock(toGo)}` : 'EXECUTIVES: announce which deals go to the vote. Maximum three.';
-        el.classList.toggle('due', toGo <= 0);
-      });
+    if (S && S.step === 'p1_sim') {
+      const time = SIM.clockAt(stepElapsed());
+      document.querySelectorAll('[data-simclock]').forEach((el) => { el.textContent = time; });
     }
-    ehrTick();
+    simTick();
+    quizTick();
   }
   setInterval(tick, 250);
 
-  // ---------- EHR engine: the alert storm, the crash, and the two tasks ----------
+  // ---------- Phase 1: the bed 14 chart ----------
 
-  const ehr = { active: false, live: true, alerts: [], next: 0, queue: [], current: null, shownAt: 0, n: 0, shown: 0, gapUntil: 0, startedAt: 0, mar: {}, dose: null, crashed: false, crashAt: CRASH_AT, lastSent: 0, pending: null, stage: 0 };
+  // Both teams open the same patient. Each tab is one screen; every clue sits on a different one.
+  const sim = { active: false, side: null, conf: null, next: 0, queue: [], current: null, shownAt: 0, gapUntil: 0, tab: 'summary', notesTab: 'progress', open: {}, fax: 1, tx: 0, labs: false, faxIn: false, down: false, msgSig: null, msgCount: -1, repliedAt: {}, flowVals: {}, assessDone: new Set(), chart: null, saveTimer: null };
 
-  // `live` runs follow the server's round timer and report to it; replays after the decision are local only.
-  function ehrStart(alerts, live, crashAt) {
-    Object.assign(ehr, { active: true, live, alerts, queue: [], current: null, n: 0, gapUntil: 0, startedAt: Date.now(), mar: {}, dose: null, crashed: false, crashAt: crashAt || null, lastSent: 0, pending: null, stage: 0 });
-    const elapsed = ehrElapsed();
+  function simStart(side) {
+    const conf = SIM.SIDES[side];
+    const saved = (S.you.sim && S.you.sim.chart) || {};
+    const chart = {
+      alerts: { ...saved.alerts }, pages: { ...saved.pages }, clues: [...(saved.clues || [])],
+      decisions: JSON.parse(JSON.stringify(saved.decisions || {})), notes: saved.notes || '',
+      mar: { ...saved.mar }, flow: [...(saved.flow || [])], assess: saved.assess || 0, overrides: saved.overrides || 0,
+      findings: [...(saved.findings || [])],
+    };
+    Object.assign(sim, {
+      active: true, side, conf, queue: [], current: null, gapUntil: 0, tab: conf.tabs[0][0], notesTab: 'progress', open: {}, fax: 1, tx: 0,
+      labs: false, faxIn: false, down: false, msgSig: null, msgCount: -1, repliedAt: {}, flowVals: {},
+      assessDone: new Set(conf.assessments ? conf.assessments.slice(0, chart.assess) : []), chart,
+    });
     // After a mid-round reload, skip interruptions that already fired.
-    ehr.next = alerts.findIndex((a) => a.t > elapsed - 1);
-    if (ehr.next < 0) ehr.next = alerts.length;
-    ehr.shown = ehr.next;
+    const elapsed = stepElapsed();
+    sim.next = conf.alerts.findIndex((a) => a.t > elapsed - 1);
+    if (sim.next < 0) sim.next = conf.alerts.length;
+    sideShell();
+    renderFindings();
+    showTab(sim.tab);
+    simTick();
   }
 
-  function ehrStop() {
-    sim.run = '';
-    ehr.active = false;
-    ehr.current = null;
-    ehr.mar = {};
+  function simStop() {
+    if (!sim.active) return;
+    if (sim.saveTimer) {
+      clearTimeout(sim.saveTimer);
+      sim.saveTimer = null;
+      act('sim', { chart: sim.chart });
+    }
+    sim.active = false;
+    sim.current = null;
   }
 
-  function ehrElapsed() {
-    if (!ehr.live) return (Date.now() - ehr.startedAt) / 1000;
-    const ms = remainingMs();
-    return ms === null ? 0 : (S.timerTotal || SIM_LENGTH) - ms / 1000;
+  function simSave() {
+    clearTimeout(sim.saveTimer);
+    sim.saveTimer = setTimeout(() => {
+      sim.saveTimer = null;
+      act('sim', { chart: sim.chart });
+    }, 300);
   }
 
-  // Many players dismiss many alerts: batch progress reports to one every two seconds.
-  function ehrReport(extra, now) {
-    if (!ehr.live) return;
-    ehr.pending = { ...(ehr.pending || {}), ...extra, n: ehr.n };
-    if (!now && Date.now() - ehr.lastSent < 2000) return;
-    const body = ehr.pending;
-    ehr.pending = null;
-    ehr.lastSent = Date.now();
-    act('ehr', body);
+  function clue(...ids) {
+    const fresh = ids.filter((id) => id && !sim.chart.clues.includes(id));
+    if (!fresh.length) return;
+    sim.chart.clues.push(...fresh);
+    simSave();
   }
 
-  function ehrCrash() {
-    ehr.crashed = true;
-    ehr.current = null;
-    ehr.queue = [];
-    ehrReport({ steps: sim.done, given: sim.given }, true);
-    const win = document.querySelector('.ehr-window, .after-window');
-    if (!win || win.querySelector('.ehr-crash')) return;
-    const veil = document.createElement('div');
-    veil.className = 'ehr-crash';
-    veil.innerHTML = `
-      <div class="ehr-crash-box">
-        <div class="ehr-alert-head">MedCore Legacy 9.4.1 (Not Responding)</div>
-        <p><b>Session not responding.</b></p>
-        <p>The application server is out of memory.<br>Alert queue: 347 unacknowledged across 6 West.</p>
-        <p class="ehr-crash-small">Failing over to backup… backup unavailable.<br>All workstations on 6 West disconnected. Begin downtime procedures.</p>
-        <button class="ehr-btn" disabled>Wait for the program to respond</button>
-      </div>`;
-    win.appendChild(veil);
+  function simTick() {
+    if (!sim.active) return;
+    const sec = stepElapsed();
+    if (!sim.labs && sec >= SIM.LABS_AT) {
+      sim.labs = true;
+      if (!sim.down && ['results', 'summary'].includes(sim.tab)) refresh();
+    }
+    if (!sim.faxIn && sec >= SIM.FAX_AT) {
+      sim.faxIn = true;
+      if (!sim.down && sim.tab === 'media') refresh();
+    }
+    if (!sim.down && sec >= SIM.DOWN_AT) goDown(sec - SIM.DOWN_AT > 5);
+    pagerTick(sec);
+    if (sim.down) return;
+    const alerts = sim.conf.alerts;
+    while (sim.next < alerts.length && alerts[sim.next].t <= sec) {
+      const a = alerts[sim.next++];
+      if (!sim.chart.alerts[a.id]) sim.queue.push(a);
+    }
+    const waiting = document.querySelector('[data-simwaiting]');
+    if (waiting) waiting.textContent = sim.queue.length ? `${sim.queue.length} more waiting` : '';
+    const all = document.querySelector('[data-simoverride]');
+    if (all) all.textContent = `OVERRIDE ALL (${sim.queue.length + 1})`;
+    else if (sim.current && sec >= SIM.OVERRIDE_AT) {
+      document.querySelector('#sim-alert .wf-alert-btns')?.insertAdjacentHTML('beforeend', `<button class="ehr-btn override" data-act="sim-alert" data-a="override" data-simoverride>OVERRIDE ALL (${sim.queue.length + 1})</button>`);
+    }
+    if (!sim.current && sim.queue.length && Date.now() >= sim.gapUntil) showAlert(sec);
   }
 
-  function ehrTick() {
-    if (!ehr.active || ehr.crashed) return;
-    const elapsed = ehrElapsed();
-    if (ehr.crashAt && elapsed >= ehr.crashAt) return ehrCrash();
-    if (ehr.pending && Date.now() - ehr.lastSent >= 2000) ehrReport({});
-    const bar = document.querySelector('.ehr-titlebar');
-    if (bar) bar.classList.toggle('lag', ehr.live && elapsed >= LAG_START);
-    while (ehr.next < ehr.alerts.length && ehr.alerts[ehr.next].t <= elapsed) ehr.queue.push(ehr.alerts[ehr.next++]);
-    const layer = document.getElementById('ehr-alert');
+  function showAlert(sec) {
+    const layer = document.getElementById('sim-alert');
     if (!layer) return;
-    const waiting = layer.querySelector('[data-waiting]');
-    if (waiting) waiting.textContent = ehr.queue.length ? `+${ehr.queue.length} more waiting behind this one` : '';
-    if (ehr.current || !ehr.queue.length || Date.now() < ehr.gapUntil) return;
-    ehr.current = ehr.queue.shift();
-    ehr.shownAt = Date.now();
-    ehr.shown++;
-    ehr.stage = 0;
-    const depth = Math.min(4, ehr.queue.length);
+    sim.current = sim.queue.shift();
+    sim.shownAt = Date.now();
+    const override = sec >= SIM.OVERRIDE_AT ? `<button class="ehr-btn override" data-act="sim-alert" data-a="override" data-simoverride>OVERRIDE ALL (${sim.queue.length + 1})</button>` : '';
     layer.innerHTML = `
       ${Array.from({ length: depth }, (_, i) => `<div class="ehr-ghost" style="--d:${depth - i}"></div>`).join('')}
       <div class="ehr-alert-box">
-        <div class="ehr-alert-head">Clinical Advisory <span>#${ehr.shown}</span></div>
+        <div class="ehr-alert-head">Clinical Advisory <span>#${sim.conf.alerts.indexOf(sim.current) + 1}</span></div>
         <div class="ehr-alert-body">
           <div class="ehr-alert-icon">⚠️</div>
           <div>
-            <div class="ehr-alert-title">${esc(ehr.current.title)}</div>
-            <div class="ehr-alert-sub">${esc(ehr.current.sub)}</div>
+            <div class="ehr-alert-title">${esc(sim.current.title)}</div>
+            <div class="ehr-alert-sub">${esc(sim.current.sub)}</div>
           </div>
         </div>
-        <div class="ehr-alert-reason" data-reason></div>
-        <button class="ehr-btn" data-act="dismiss">${ehr.current.reason ? 'OVERRIDE' : 'DISMISS'}</button>
-        <div class="ehr-alert-wait" data-waiting>${ehr.queue.length ? `+${ehr.queue.length} more waiting behind this one` : ''}</div>
+        <div class="wf-alert-btns">
+          <button class="ehr-btn" data-act="sim-alert" data-a="ack">ACKNOWLEDGE</button>
+          <button class="ehr-btn" data-act="sim-alert" data-a="act">ACT ON IT</button>
+          <button class="ehr-btn" data-act="sim-alert" data-a="dismiss">DISMISS</button>
+          ${override}
+        </div>
+        <div class="wf-waiting" data-simwaiting>${sim.queue.length ? `${sim.queue.length} more waiting` : ''}</div>
       </div>`;
     layer.innerHTML = iconize(layer.innerHTML);
     layer.classList.add('show');
   }
 
-  function ehrDismiss(btn) {
-    if (!ehr.current || ehr.crashed) return;
-    // Some warnings demand a reason from a dropdown before they go away.
-    if (ehr.current.reason && ehr.stage === 0) {
-      ehr.stage = 1;
-      const slot = document.querySelector('[data-reason]');
-      if (slot) slot.innerHTML = 'Override reason: <span class="ehr-select">Benefit outweighs risk ▾</span>';
-      if (btn) btn.textContent = 'ACKNOWLEDGE';
-      return;
+  function alertAction(a) {
+    const alert = sim.current;
+    if (!alert) return;
+    const ms = Date.now() - sim.shownAt;
+    const sec = stepElapsed();
+    const stamp = { at: SIM.clockAt(sec), t: Math.round(sec) };
+    sim.chart.alerts[alert.id] = { a, ms, ...stamp };
+    // One click clears the whole stack, the way five alerts vanished at 11:06.
+    if (a === 'override') {
+      for (const q of sim.queue) sim.chart.alerts[q.id] = { a: 'override', ms: 0, ...stamp };
+      sim.queue = [];
+      sim.chart.overrides++;
     }
-    // In the last half minute every click hangs.
-    if (ehr.live && ehrElapsed() >= LAG_START && ehr.stage < 2) {
-      ehr.stage = 2;
-      if (btn) {
-        btn.textContent = 'Not responding…';
-        btn.disabled = true;
-      }
-      setTimeout(() => ehrDismiss(null), 1100);
-      return;
-    }
-    ehr.n++;
-    const report = {};
-    if (ehr.current.crit) report.critMs = Date.now() - ehr.shownAt;
-    ehr.current = null;
-    ehr.gapUntil = Date.now() + 160;
-    const layer = document.getElementById('ehr-alert');
+    sim.current = null;
+    sim.gapUntil = Date.now() + 350;
+    const layer = document.getElementById('sim-alert');
     if (layer) layer.classList.remove('show');
-    ehrReport(report, 'critMs' in report);
-    renderSim();
+    if (a === 'act' && alert.go) showTab(alert.go);
+    simSave();
   }
 
-  // ---------- the frozen simulation: ten steps, the same every run ----------
-  // Each step names the task, the problems it exposes (`probs`), and the problem whose fix changes it (`gov`).
-  // A step has up to three versions: `old` (today's EHR), `part` (partly fixed) and `fresh` (fixed).
-  // A version shows `html`, may ask the player to find one line among `rows`, and then has `seq`: buttons pressed in order.
-
-  const LAB_ROWS = ['Sodium 134', 'Potassium 6.2 H', 'Chloride 101', 'CO2 21 L', 'BUN 48 H', 'Creatinine 2.4 H', 'eGFR 29 L', 'Glucose 312 H', 'Calcium 8.4 L', 'Magnesium 1.3 L', 'Phosphorus 3.9', 'AST 76 H', 'ALT 132 H', 'Alk Phos 141 H', 'T. Bili 1.8 H', 'Albumin 2.6 L', 'INR 1.2 H', 'Tacrolimus 19.4 H', 'WBC 14.6 H', 'Hemoglobin 8.7 L', 'Hematocrit 26.4 L', 'Platelets 104 L', 'Lactate 2.9 H', 'Triglycerides 171 H', 'Urine output 26 L', 'CMV PCR pending'];
-
-  const SCRIPT = {
-    physician: [
-      { short: 'Find the tacrolimus level', task: "Find today's tacrolimus level.", probs: ['buried', 'find', 'ui'], gov: 'buried',
-        old: { html: '<p>Results: 26 components. No critical threshold was ever set for tacrolimus.</p>', rows: LAB_ROWS, answer: 17, look: 'Find the line that starts with "Tacrolimus" and click it.' },
-        fresh: { html: '<div class="sim-crit">Tacrolimus 19.4 ng/mL: CRITICAL (target 8 to 12)</div><div class="sim-crit">Potassium 6.2 mmol/L: CRITICAL</div><p>Paged to Dr. Raman at 13:02. The other 24 results are normal or unchanged.</p>', seq: ['Acknowledge'] } },
-      { short: 'Confirm home medicines', task: 'Confirm what he takes at home.', probs: ['medrec', 'dupes'], gov: 'medrec',
-        old: { html: '<p>Three sources disagree: an outside discharge list (warfarin, metformin), a scanned clinic letter (apixaban, insulin), and a pharmacy free-text note (ibuprofen at home).</p>', seq: ['Open list 1 of 3', 'Open list 2 (scanned image)', 'Open the pharmacy note', 'Reconcile by hand', 'Re-type 11 medications', 'Save'] },
-        fresh: { html: '<p><b>One reconciled list.</b> Warfarin and metformin removed. Ibuprofen at home flagged as a kidney risk. Lactulose and rifaximin closed.</p>', seq: ['Confirm the list'] } },
-      { short: "Read today's note", task: "Find what changed in today's note.", probs: ['bloat', 'copy'], gov: 'bloat',
-        old: { html: '<p>Progress note, 11 pages. Most of it was carried forward from admission.</p>', answer: 7, look: 'Click the one page that was written today. The others say copied, imported, or template.',
-          rows: ['Page 1: History (copied from 09/22)', 'Page 2: Exam: "abdomen distended with fluid" (copied from 09/22)', 'Page 3: Medication list (imported)', 'Page 4: Labs 09/24 to 09/28 (imported)', 'Page 5: Imaging (imported)', 'Page 6: Plan items 1 to 6 (copied from 09/28)', 'Page 7: Plan item 7: "grade 2 encephalopathy, continue lactulose" (copied from 09/22)', 'Page 8: Fever 38.1, cultures sent, antibiotic started', 'Page 9: Billing statement (template)', 'Page 10: Quality attestations (template)', 'Page 11: Signature block'] },
-        part: { html: '<p>The note is now 4 pages, and copied text shows its original date.</p>', seq: ["Scroll to today's changes", 'Sign'] },
-        // The AI scribe's draft is short and mostly right. It also carries one error forward. Signing without reading has a cost.
-        fresh: { html: '<p><b>One page, drafted by the AI scribe from the bedside conversation.</b></p><div class="sim-note"><b>Today:</b> fever 38.1 at 10:30, cultures sent, piperacillin-tazobactam started. Tacrolimus 19.4, critical. Potassium 6.2.<br><b>Plan:</b> hold the 21:00 tacrolimus and recheck the level. Continue lactulose three times daily. Follow cultures. Target discharge October 2.</div>', any: true, look: 'This note was drafted by the AI. Decide how to handle it.',
-          rows: [
-            { t: 'Sign the note', flag: 'signed_blind', say: 'Signed. One click.' },
-            { t: 'Read it line by line before signing', flag: 'caught', say: 'You found it: "continue lactulose" is left over from his old liver. Corrected, then signed.' },
-          ] } },
-      { short: 'Check outside records', task: 'Check his outside records before choosing an antibiotic.', probs: ['interop'], gov: 'interop',
-        old: { html: '<p>Media tab: "Outside records.pdf", 84 pages, scanned as one image. It cannot be searched.</p>', seq: ['Open the Media tab', 'Open the 84-page fax', 'Next page', 'Next page', 'Next page', 'Give up'], miss: 'You never reached page 31: resistant E. coli, March 2026. Today\'s antibiotic does not cover it.' },
-        part: { html: '<p>His medication history imported by itself. The 84-page fax is still a scanned image.</p>', seq: ['Open the fax', 'Next page', 'Give up'], miss: 'You never reached page 31: resistant E. coli, March 2026. Today\'s antibiotic does not cover it.' },
-        fresh: { html: '<p><b>The outside records arrived as data.</b> Resistant <i>E. coli</i>, March 2026, is flagged on the antibiotic order. A contrast dye reaction was added to his allergies.</p>', seq: ['Switch to meropenem'] } },
-      { short: "Find the kidney team's advice", task: "Find the kidney team's advice on tacrolimus.", probs: ['handoff', 'find'], gov: 'handoff',
-        old: { html: '<p>Eight consult notes, each under a different tab.</p>', answer: 4, look: 'The kidney team is called Nephrology. Click their note.',
-          rows: ['Consults tab: Cardiology 09/26', 'Consults tab: Infectious Disease 09/27', 'Ancillary tab: Nutrition 09/27', 'Consults tab: Endocrinology 09/28', 'Consults tab: Nephrology 09/28', 'Ancillary tab: Social Work 09/28', 'Pharmacy Notes tab: Transplant Pharmacy 09/29', 'Rehab tab: Physical Therapy 09/29'] },
-        part: { html: '<p>Consult advice now sits beside the order it affects.</p>', seq: ['Open the tacrolimus order', 'Read the advice'] },
-        fresh: { html: '<p><b>Shown on the order itself.</b> Nephrology, 09/28: hold the next dose if the level is above 12. Infectious disease, 09/27: fluconazole raises tacrolimus.</p>', seq: ['Got it'] } },
-      { short: "Hold tonight's dose", task: "Hold tonight's tacrolimus dose.", probs: ['clicks'], gov: 'clicks',
-        old: { html: '<p>Order entry: tacrolimus 4 mg twice daily, next dose 21:00.</p>', seq: ['Open order', 'Modify', 'Select dose: HOLD', 'Confirm order change', 'Select a reason', 'Enter PIN', 'Sign'] },
-        fresh: { html: '<p>Tacrolimus 4 mg twice daily, next dose 21:00. Pharmacy and the bedside nurse are told when you sign.</p>', seq: ["Hold tonight's dose", 'Sign'] } },
-      { short: 'Close the chart', task: 'Close the chart.', probs: ['docburden'], gov: 'docburden',
-        old: { html: '<p>The chart will not close until the billing and quality fields are complete.</p>', seq: ['Close chart', 'Hard stop: choose level of service', 'Hard stop: quality field 1 of 7', 'Quality field 2 of 7', 'Quality field 3 of 7', 'Skip the rest: enter override reason', 'Close chart'] },
-        part: { html: '<p>Fewer hard stops. The billing level is still yours to pick.</p>', seq: ['Close chart', 'Choose level of service'] },
-        fresh: { html: '<p>The billing level and quality fields were filled in from the note.</p>', seq: ['Close chart'] } },
-      { short: 'Find the pathology result', task: 'Find his pathology result in your inbox.', probs: ['inbox', 'buried'], gov: 'inbox',
-        old: { html: '<p>In Basket: 140 unread. Nothing is marked urgent.</p>', answer: 10, look: 'Click the pathology result for WHITFIELD.',
-          rows: ['Refill request: sertraline (HALVORSEN)', 'Result: routine CBC (ADEYEMI)', 'Staff message: parking validation', 'Portal message: "what is the discharge date?"', 'Coding query: clarify "acute kidney injury"', 'Cosign needed: verbal orders x6', 'Result: chest x-ray (WHITFIELD)', 'Meeting invite: EHR optimization committee', 'Result: ECG (WHITFIELD)', 'Refill request: amlodipine (OKONKWO)', 'Result: surgical pathology (WHITFIELD)', 'Portal message: "is the fever serious?"', 'Survey: rate your EHR experience', '... 127 more'] },
-        fresh: { html: '<p><b>Three urgent items on top:</b> pathology (a second tumor was found), ECG (QTc 492), chest x-ray. The other 137 went to the team pool.</p>', seq: ['Open pathology'] } },
-      { short: 'Start the discharge', task: 'Get his discharge started.', probs: ['discharge'], gov: 'discharge',
-        old: { html: '<p>Nine tasks, tracked in six different places.</p>', seq: ['Scheduling system: book clinic', 'Fax the lab standing order', 'Specialty pharmacy portal: prior authorization', 'Discharge module: BLOCKED', 'Phone home health', 'Phone transport', 'Education module', 'Phone the outside kidney clinic', 'Write it on a sticky note'] },
-        fresh: { html: '<p><b>One discharge screen.</b> Nine tasks, each with an owner and a status. The family can see it too.</p>', seq: ['Assign the open tasks'] } },
-      { short: 'Respond to the sepsis score', task: 'Decide what to do about the sepsis score.', probs: ['ai'], gov: 'ai',
-        old: { html: '<p>Sepsis risk 0.71, HIGH. Accuracy: not available. Transplant patients: not evaluated. Owner: blank. Fired 12 times today.</p>', seq: ['Look for accuracy data', 'None exists. Guess.'] },
-        part: { html: '<p>The sepsis model is switched off pending review. It has no owner yet.</p>', seq: ['Continue without it'] },
-        fresh: { html: '<p><b>Sepsis model:</b> owner Dr. Raman, 81% accurate in transplant patients, reviewed every quarter. It fired once.</p>', seq: ['Review with the team'] } },
-    ],
-    nurse: [
-      { short: 'Check the noon labs', task: 'Check the noon labs before you give anything.', probs: ['buried', 'ui'], gov: 'buried',
-        old: { html: '<p>Results: 26 components. One of them is dangerous.</p>', rows: LAB_ROWS, answer: 1, look: 'Find the potassium line and click it. A potassium above 6 is an emergency.' },
-        fresh: { html: '<div class="sim-crit">Potassium 6.2 mmol/L: CRITICAL</div><p>The physician was paged at 13:02 and an ECG is ordered.</p>', seq: ['Acknowledge'] } },
-      { short: 'Give the 12:30 insulin', task: 'Give the 12:30 insulin.', probs: ['clicks'], gov: 'clicks',
-        old: { html: '<p>insulin lispro 8 units, glucose 312.</p>', seq: ['Scan patient band', 'Scan medication', 'Barcode not recognized: Override', 'Select override reason', 'Enter glucose value', 'Request second nurse', 'Witness unavailable: Bypass', 'Document injection site', 'Confirm dose', 'Sign'] },
-        fresh: { html: '<p>insulin lispro 8 units, glucose 312. The scanner reads the first time.</p>', seq: ['Scan patient band', 'Scan insulin pen', 'Confirm 8 units'] } },
-      { short: 'Decide what else is due', task: 'Decide what else is due and safe.', probs: ['medrec'], gov: 'medrec',
-        old: { html: '<p>Due at 13:00: a high-protein supplement drink (potassium 400 mg) and lactulose. A low-potassium diet order is also active.</p>', any: true, look: 'Choose what you would do. Think about his potassium first.',
-          rows: [{ t: 'Give the supplement drink', flag: 'supp' }, { t: 'Give the lactulose', flag: 'lact' }, { t: 'Hold both and call the physician' }] },
-        fresh: { html: '<p>The supplement was stopped when the low-potassium diet was ordered. Lactulose was discontinued after the transplant.</p>', seq: ['Nothing else is due'] } },
-      { short: 'Chart the vitals', task: 'Chart the 12:00 vital signs.', probs: ['dupes'], gov: 'dupes',
-        old: { html: '<p>Temp 37.9, HR 108, BP 156/92, RR 20, SpO2 93% on 2 L, pain 3. Three screens want them.</p>', seq: ['Type six vitals in the flowsheet', 'Save', 'Re-type them in the transplant module', 'Save', 'Re-type them in intake and output', 'Save'] },
-        fresh: { html: '<p>Temp 37.9, HR 108, BP 156/92, RR 20, SpO2 93% on 2 L, pain 3. Charted once, filed everywhere.</p>', seq: ['Chart vitals from the monitor'] } },
-      { short: 'Clear required documentation', task: 'Clear your required documentation.', probs: ['docburden'], gov: 'docburden',
-        old: { html: '<p>Fourteen tasks on the worklist. Two are duplicates. One is overdue.</p>', seq: ['Fall risk score', 'Braden skin score', 'Pain reassessment (overdue)', 'Care plan update', 'Education record', 'Hourly rounding', 'Dismiss the duplicate vitals task'] },
-        part: { html: '<p>The duplicates are gone. Three assessments are still required every shift.</p>', seq: ['Fall risk score', 'Skin score', 'Pain reassessment'] },
-        fresh: { html: '<p>The worklist shows only what changed this shift.</p>', seq: ['Confirm the 2 that changed'] } },
-      { short: 'Find the tacrolimus plan', task: "Find the plan for tonight's tacrolimus.", probs: ['handoff'], gov: 'handoff',
-        old: { html: '<p>Four places describe the plan. They do not agree.</p>', answer: 3, look: 'Click the advice from the kidney team (Nephrology). Theirs is the one that matters tonight.',
-          rows: ['Surgery note: continue 4 mg twice daily', 'Night handoff: surgery "might change the tacrolimus"', 'Pharmacy: interaction review pending', 'Consults tab: Nephrology says hold if the level is above 12'] },
-        part: { html: '<p>The care plan is shared between teams.</p>', seq: ['Open the care plan', 'Read it'] },
-        fresh: { html: '<p><b>One plan, on the handoff screen:</b> hold tonight\'s tacrolimus if the level is above 12. Owner: Dr. Chen.</p>', seq: ['Acknowledge the plan'] } },
-      { short: "Read the night nurse's note", task: "Check the night nurse's note for anything urgent.", probs: ['find'], gov: 'find',
-        old: { html: '<p>A free-text shift note. Physicians rarely open these.</p>', answer: 4, look: 'Click the line that describes a new symptom. The rest is routine.',
-          rows: ['Slept in short stretches', 'Pain 2 to 4 out of 10, oxycodone at 01:15', 'Glucose 198 at 02:00', 'Fall precautions in place, call light within reach', 'Patient says his hands "feel shaky" holding a cup', 'One loose stool after lactulose', 'Labs drawn 05:40, sample clotted', 'Will continue to monitor'] },
-        fresh: { html: '<p><b>Flagged from the night shift:</b> new hand tremor at 05:30, urine 26 mL per hour, page at 05:50 not answered.</p>', seq: ['Escalate to the physician'] } },
-      { short: 'Confirm home medicines', task: 'Confirm his home medicines.', probs: ['interop'], gov: 'interop',
-        old: { html: '<p>The outside pharmacy record did not transfer.</p>', seq: ['Phone his daughter', 'Wait while she reads the pill bottles', 'Type it into a free-text note'] },
-        part: { html: '<p>His pharmacy fill history imported. One item still needs checking by phone.</p>', seq: ['Check the imported history', 'Phone to confirm one item'] },
-        fresh: { html: '<p>His pharmacy fill history and outside records arrived as data. Ibuprofen is on the list.</p>', seq: ['Confirm the imported list'] } },
-      { short: 'Start the discharge', task: 'Start his discharge teaching and tasks.', probs: ['discharge'], gov: 'discharge',
-        old: { html: '<p>Nine tasks, tracked in six different places.</p>', seq: ['Education module: diabetes', 'Education module: medications', 'Phone home health', 'Phone transport', "Check the case manager's sticky notes", 'Discharge module: BLOCKED'] },
-        fresh: { html: '<p><b>One discharge screen.</b> Nine tasks, each with an owner. The family can see it too.</p>', seq: ['Open the shared discharge screen'] } },
-      { short: 'Respond to the warning scores', task: 'Respond to the early warning and sepsis scores.', probs: ['ai'], gov: 'ai',
-        old: { html: '<p>Early warning score 5. Sepsis risk 0.71, HIGH. No guidance on which to trust. Nobody was called.</p>', seq: ['Look for guidance', 'None exists. Guess.'] },
-        part: { html: '<p>The sepsis model is switched off. The early warning score still calls nobody.</p>', seq: ['Call the physician yourself'] },
-        fresh: { html: '<p>Early warning score 5 called the physician to the bedside by itself. The sepsis model has an owner and fired once.</p>', seq: ['Meet the physician at the bedside'] } },
-    ],
-  };
-
-  const sim = { side: 'physician', after: false, i: 0, pos: 0, found: false, wrong: [], clicks: 0, done: 0, given: [], misses: [], startedAt: 0, endedAt: 0, run: '' };
-  // On the projector the facilitator can show the replay under any package, not only the one the room bought.
-  const hostSim = { pkg: null, side: 'physician' };
-  function simDeal() {
-    if (S.isHost && hostSim.pkg && hostSim.pkg !== S.decision.pkg) return { pkg: hostSim.pkg, modules: [], terms: [], dropped: [] };
-    return S.decision;
-  }
-  function simLevel(step) {
-    if (!sim.after) return 'old';
-    const cov = coverage(simDeal());
-    if (cov.full.has(step.gov) && step.fresh) return 'fresh';
-    if (cov.partial.has(step.gov) && step.part) return 'part';
-    return 'old';
-  }
-  const LEVEL_TAG = { fresh: 'NEW', part: 'PARTLY FIXED', old: 'UNCHANGED' };
-
-  // How much work a version of a step takes, in plain words.
-  function effort(v) {
-    const parts = [];
-    if (v.rows) parts.push(v.any ? `choose 1 of ${v.rows.length}` : `find 1 line among ${v.rows.length}`);
-    if (v.seq) parts.push(`${v.seq.length} click${v.seq.length === 1 ? '' : 's'}`);
-    return parts.join(', then ');
-  }
-  const plainText = (html) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
-  // Which part of the deal fixed this step, or what would have.
-  function fixedBy(step) {
-    const d = simDeal();
-    if (d.pkg !== 'd' || coverage({ pkg: 'd', modules: [] }).full.has(step.gov)) return `Package ${PACKAGES[d.pkg].letter}`;
-    const mods = MODULES.filter((m) => m.fixes.includes(step.gov) && d.modules.includes(m.id)).map((m) => m.label);
-    return mods.length ? `the ${mods.join(' and ')} module` : `Package ${PACKAGES[d.pkg].letter}`;
-  }
-  function wouldFix(step) {
-    const pk = PACKAGE_ORDER.filter((id) => coverage({ pkg: id, modules: [] }).full.has(step.gov)).map((id) => PACKAGES[id].letter);
-    const mods = MODULES.filter((m) => m.fixes.includes(step.gov)).map((m) => (m.id === 'scribe' ? 'the AI scribe plus AI governance' : `the ${m.label.toLowerCase()} module`));
-    const options = [pk.length ? `Package ${pk.join(' or ')}` : '', mods.length ? `Package D with ${mods.join(' or ')}` : ''].filter(Boolean);
-    return options.join(', or ');
-  }
-
-  function simList() {
-    return SCRIPT[sim.side]
-      .map((st, k) => {
-        const state = k < sim.i ? 'done' : k === sim.i ? 'now' : '';
-        const level = simLevel(st);
-        return `<li class="${state} ${sim.after ? level : ''}"><span class="sim-dot">${k < sim.i ? '✓' : k + 1}</span><span>${esc(st.short)}</span>${sim.after ? `<em>${LEVEL_TAG[level]}</em>` : ''}</li>`;
-      })
-      .join('');
-  }
-
-  // The ending: one row per step, before against now.
-  function simFinish() {
-    const secs = Math.max(1, Math.round((sim.endedAt - sim.startedAt) / 1000));
-    if (!sim.after) return `<div class="sim-card old"><h3>All ten steps done.</h3><p>Almost nobody gets here before the system goes down.</p></div>`;
-    const steps = SCRIPT[sim.side];
-    const count = (lv) => steps.filter((st) => simLevel(st) === lv).length;
-    const d = simDeal();
-    const before = S.isHost ? null : (S.you.ehr && S.you.ehr.steps) || 0;
-    const bought = (id) => d.pkg === 'c' || (d.pkg === 'd' && d.modules.includes(id));
-    const also = d.pkg === 'keep' ? '' : `<div class="sim-also-head">ALSO IN, OR MISSING FROM, YOUR DEAL</div><ul class="sim-also">${['portal', 'migration', 'training'].map((id) => `<li class="${bought(id) ? 'yes' : 'no'}">${bought(id) ? '✓' : '✗'} ${esc(bought(id) ? MODULE[id].bought : MODULE[id].not)}</li>`).join('')}</ul>`;
-    const rows = steps
-      .map((st, k) => {
-        const lv = simLevel(st);
-        return `<tr class="${lv}"><td>${k + 1}</td><td>${esc(st.short)}</td><td>${esc(effort(st.old))}</td><td>${lv === 'old' ? 'the same' : esc(effort(st[lv]))}</td><td><span class="sim-tag ${lv}">${LEVEL_TAG[lv]}</span></td></tr>`;
-      })
-      .join('');
-    return `
-      <div class="sim-card fresh sim-finish">
-        <h3>${ic('circle-check')} Done: all ten steps in ${secs} seconds.</h3>
-        <div class="sim-score">
-          <div><b>${before !== null ? `${before} of 10` : 'a few'}</b><span>steps finished in the old system before it crashed</span></div>
-          <div class="good"><b>${count('fresh')}</b><span>steps fixed by your deal</span></div>
-          <div class="warn"><b>${count('part')}</b><span>partly fixed</span></div>
-          <div class="bad"><b>${count('old')}</b><span>still the old system</span></div>
-        </div>
-        ${sim.given.includes('signed_blind') ? `<p class="sim-miss">${ic('alert-triangle')} You signed the AI scribe's note without reading it. It kept him on lactulose, a drug he has not needed since the transplant. The note is yours now, not the AI's.</p>` : ''}
-        ${sim.given.includes('caught') ? `<p class="sim-good">${ic('circle-check')} You read the AI scribe's draft and caught its error: it had kept him on lactulose, a drug he no longer needs.</p>` : ''}
-        ${sim.misses.map((m) => `<p class="sim-miss">${ic('alert-triangle')} ${esc(m)}</p>`).join('')}
-        <table class="sim-table"><tr><th>#</th><th>Step</th><th>Before</th><th>Now</th><th>Result</th></tr>${rows}</table>
-        ${also}
+  function goDown(already) {
+    sim.down = true;
+    sim.queue = [];
+    sim.current = null;
+    const layer = document.getElementById('sim-alert');
+    if (layer) layer.classList.remove('show');
+    const down = document.getElementById('sim-down');
+    if (!down) return;
+    const message = `
+      <div class="wf-down-box">
+        <div class="wf-down-head">⛔ UNPLANNED DOWNTIME</div>
+        <p><b>MedChart is not responding.</b> Orders won't sign. Results, notes and the MAR cannot be viewed.</p>
+        <p>Keep caring for Mr. Whitfield. Record what you would do on the <b>paper downtime form</b> →</p>
+        <p><button class="ehr-btn sm" data-act="sim-sign">Sign pending orders (3)</button> <span class="wf-signfail" data-signfail></span></p>
+        <p class="small">The pager still works.</p>
       </div>`;
+    down.innerHTML = already ? message : '<div class="wf-freeze">MedChart Enterprise 9.4.1 (Not Responding)<div class="wf-spin"></div></div>';
+    down.classList.add('show');
+    if (!already) setTimeout(() => { if (sim.active) down.innerHTML = message; }, 4000);
+    sideTab('notes');
   }
 
-  // One step on screen. Before the vote it is simply the old system. After the vote it is laid out as
-  // BEFORE (what this step used to take) against NOW (the screen to use), with one plain instruction.
-  function simStage() {
-    const steps = SCRIPT[sim.side];
-    if (sim.i >= steps.length) return simFinish();
-    const step = steps[sim.i];
-    const level = simLevel(step);
-    const v = step[level];
-    const picking = !!v.rows && !sim.found;
-    // After two wrong guesses the right line is pointed out: the system should be the obstacle, not the puzzle.
-    // Help exists only in the replay. Phase 1 is meant to be hard: no hints, no highlight, no click counts.
-    const help = sim.after;
-    const reveal = help && picking && !v.any && sim.wrong.length >= 2;
-    const rows = v.rows
-      ? `<div class="sim-rows">${v.rows
-          .map((r, i) => `<button class="sim-row ${sim.wrong.includes(i) ? 'no' : ''} ${reveal && i === v.answer ? 'hint' : ''}" data-act="simrow" data-i="${i}">${esc(typeof r === 'string' ? r : r.t)}</button>`)
-          .join('')}</div>`
-      : '';
-    const seq = v.seq || [];
-    const btn = !picking && sim.pos < seq.length
-      ? `<div class="sim-seq"><button class="sim-btn" data-act="simnext">${esc(seq[sim.pos])}</button>${help && seq.length > 1 ? `<small>click ${sim.pos + 1} of ${seq.length}</small>` : ''}</div>`
-      : '';
-    const todo = !help
-      ? picking ? (v.any ? 'Choose one.' : `Find the right line and click it.${sim.wrong.length ? ' <b>Wrong.</b>' : ''}`) : 'Press the button.'
-      : picking
-        ? `${esc(v.look || (v.any ? 'Choose one of the options below.' : 'Scroll the list and click the right line.'))}${reveal ? ' <b>It is highlighted for you now.</b>' : sim.wrong.length ? ' <b>Not that one. Try again.</b>' : ''}`
-        : seq.length > 1 ? `Press the button below. It takes ${seq.length} presses, and that is the point: count them.` : 'Press the button below.';
-    const work = `<p class="sim-todo">${ic('pointer')} <span><b class="sim-todo-label">What to do:</b> ${todo}</span></p>${v.html || ''}${rows}${btn}`;
+  // ---------- pager ----------
 
-    if (!sim.after) {
-      return `
-        <div class="sim-card old">
-          <div class="sim-q"><span>Step ${sim.i + 1} of ${steps.length}</span></div>
-          <h3><span class="sim-yourtask">YOUR TASK</span> ${esc(step.task)}</h3>
-          ${work}
-        </div>`;
-    }
-    const about = `<p class="sim-about">This step is about: ${step.probs.map((id) => `<span class="pchip">${PROBLEM[id].n}. ${esc(PROBLEM[id].label)}</span>`).join('')}</p>`;
-    const verdict = level === 'fresh'
-      ? `${ic('circle-check')} <span><b>Fixed</b> by ${esc(fixedBy(step))}.</span>`
-      : level === 'part'
-        ? `${ic('circle-half-2')} <span><b>Partly fixed.</b> Shorter than before, with some manual work left. Fully fixed by ${esc(wouldFix(step))}.</span>`
-        : `${ic('circle-x')} <span><b>Not fixed by your deal.</b> This is the same screen as before. It would be fixed by ${esc(wouldFix(step))}.</span>`;
-    return `
-      <div class="sim-compare">
-        <div class="sim-head"><span>Step ${sim.i + 1} of ${steps.length}</span><h3><span class="sim-yourtask">YOUR TASK</span> ${esc(step.task)}</h3></div>
-        <div class="sim-verdict ${level}">${verdict}</div>
-        <div class="sim-cols ${level === 'old' ? 'single' : ''}">
-          ${level === 'old' ? '' : `<div class="sim-before"><div class="sim-label">BEFORE · the old system</div><p>${esc(plainText(step.old.html))}</p><p class="sim-effort">It took: <b>${esc(effort(step.old))}</b></p></div>`}
-          <div class="sim-card ${level === 'old' ? 'old' : 'fresh'} sim-now"><div class="sim-label">${level === 'old' ? 'NOW · still the old system. Do it the old way.' : level === 'part' ? `NOW · shorter, but not finished · takes ${esc(effort(v))}` : `NOW · takes ${esc(effort(v))}`}</div>${work}</div>
-        </div>
-        ${about}
-      </div>`;
-  }
-
-  function renderSim() {
-    const list = document.querySelector('[data-simsteps]');
-    const stage = document.querySelector('[data-simstage]');
-    if (!list || !stage) return;
-    list.innerHTML = simList();
-    stage.innerHTML = iconize(simStage());
-    const bar = document.querySelector('[data-simprogress]');
-    if (bar) bar.textContent = `${sim.done} of ${SCRIPT[sim.side].length} steps done · ${sim.clicks} clicks`;
-  }
-
-  function simAdvance(v) {
-    if (v.miss) sim.misses.push(v.miss);
-    sim.done++;
-    sim.i++;
-    sim.pos = 0;
-    sim.found = false;
-    sim.wrong = [];
-    if (sim.i >= SCRIPT[sim.side].length) sim.endedAt = Date.now();
-    if (!sim.after) ehrReport({ steps: sim.done, given: sim.given }, true);
-  }
-
-  function simClick(kind, index) {
-    if (ehr.crashed || ehr.current) return;
-    const step = SCRIPT[sim.side][sim.i];
-    if (!step) return;
-    const v = step[simLevel(step)];
-    sim.clicks++;
-    if (kind === 'row') {
-      if (!v.rows || sim.found) return;
-      const row = v.rows[index];
-      if (v.any || index === v.answer) {
-        sim.found = true;
-        if (row && row.flag) sim.given.push(row.flag);
-        if (row && row.say) toast(row.say);
-      } else {
-        if (!sim.wrong.includes(index)) sim.wrong.push(index);
-        // In the old system a wrong click is punished with one more pop-up that demands a reason.
-        if (!sim.after && ehr.active) ehr.queue.unshift({ title: 'Invalid selection', sub: 'The selected row cannot be opened from this screen. Override reason required.', reason: true });
+  function messages(sec) {
+    const list = [];
+    for (const p of sim.conf.pages) {
+      if (p.t > sec) continue;
+      list.push(p);
+      if (p.then && sim.chart.pages[p.id] === p.then.on) {
+        const at = (sim.repliedAt[p.id] ?? -Infinity) + p.then.after;
+        if (sec >= at) list.push({ id: `${p.id}_then`, t: Math.max(p.t, at), from: p.then.from, text: p.then.text });
       }
-    } else if (!(v.rows && !sim.found)) sim.pos++;
-    if ((!v.rows || sim.found) && sim.pos >= (v.seq || []).length) simAdvance(v);
-    renderSim();
+    }
+    return list.sort((a, b) => b.t - a.t);
   }
 
-  // A system with working alerts interrupts once, with the one thing that matters.
-  function simShowAlert(side) {
-    const layer = document.getElementById('ehr-alert');
-    if (!layer || ehr.crashed) return;
-    layer.innerHTML = iconize(`
-      <div class="after-alert"><div class="after-alert-head">${ic('urgent')} Critical · ${side === 'physician' ? 'tacrolimus 19.4' : 'potassium 6.2'}</div>
-        <p>${side === 'physician' ? 'Fluconazole and diltiazem are raising the level. Potassium is 6.2. Nephrology advised holding above 12.' : 'The potassium supplement is blocked. The physician has been paged and an ECG is ordered.'}</p>
-        <p class="after-quiet">This is the only interruption. ${Math.max(0, PACKAGES[simDeal().pkg].alertsAfter - 1)} routine reminders are waiting in a quiet list.</p>
-        <button class="abtn primary" data-act="simalert">Acknowledge</button></div>`);
-    layer.classList.add('show');
+  function pagerTick(sec) {
+    const list = messages(sec);
+    const sig = list.map((m) => `${m.id}:${sim.chart.pages[m.id] ?? ''}`).join(',');
+    if (sig === sim.msgSig) return;
+    if (sim.msgCount >= 0 && list.length > sim.msgCount) toast(`📟 ${list[0].from.split(' · ')[0]}`);
+    sim.msgSig = sig;
+    sim.msgCount = list.length;
+    const open = list.filter((m) => m.replies && sim.chart.pages[m.id] == null).length;
+    const badge = document.querySelector('[data-simbadge]');
+    if (badge) badge.textContent = open || '';
+    const body = document.getElementById('sim-pager');
+    if (!body) return;
+    body.innerHTML = list.length
+      ? list.map((m) => {
+          const answered = sim.chart.pages[m.id];
+          const replies = !m.replies ? ''
+            : answered != null ? `<div class="wf-replied">You: ${esc(m.replies[answered])}</div>`
+            : `<div class="wf-replies">${m.replies.map((r, i) => `<button data-act="sim-reply" data-id="${m.id}" data-n="${i}">${esc(r)}</button>`).join('')}</div>`;
+          return `
+            <div class="wf-page ${m.replies && answered == null ? 'new' : ''}">
+              <div class="wf-page-head"><b>${esc(m.from)}</b><span>${SIM.clockAt(m.t)}</span></div>
+              <p>${esc(m.text)}</p>${replies}
+            </div>`;
+        }).join('')
+      : '<p class="wf-quiet">No pages yet.</p>';
   }
 
-  function startSim(side, after) {
-    ehrStop();
-    ehr.crashed = false;
-    ehr.current = null;
-    const run = `${side}:${after ? simDeal().pkg : 'before'}:${Date.now()}`;
-    Object.assign(sim, { side, after, i: 0, pos: 0, found: false, wrong: [], clicks: 0, done: 0, given: [], misses: [], startedAt: Date.now(), endedAt: 0, run });
-    renderSim();
-    if (!after) return ehrStart(ALERTS[side], true, CRASH_AT);
-    if (coverage(simDeal()).full.has('alerts')) {
-      setTimeout(() => S && S.step === 'p6_sim' && sim.run === run && simShowAlert(side), 2500);
+  function reply(id, n) {
+    if (sim.chart.pages[id] != null) return;
+    sim.chart.pages[id] = n;
+    sim.repliedAt[id] = stepElapsed();
+    simSave();
+    sim.msgSig = null;
+    pagerTick(stepElapsed());
+  }
+
+  // ---------- findings log and decisions (a paper downtime form once the EHR is down) ----------
+
+  function decisionHtml(d, i) {
+    const value = sim.chart.decisions[d.id];
+    let body;
+    if (d.text) {
+      body = `<textarea data-simdec="${d.id}" rows="3" maxlength="800" placeholder="Situation, what you did, what to watch">${esc(value || '')}</textarea>`;
     } else {
-      // Nothing fixed the alerting, so the storm and the crash happen again.
-      ehrStart(ALERTS[side].map((a) => ({ ...a, crit: false })), false, CRASH_AT);
+      const on = (id) => (d.multi ? (value || []).includes(id) : value === id);
+      body = `<div class="wf-dec-opts">${d.options.map(([id, label]) => `<button class="${on(id) ? 'on' : ''}" data-act="sim-dec" data-id="${d.id}" data-opt="${id}">${esc(label)}</button>`).join('')}</div>`;
     }
+    return `<div class="wf-dec"><div class="wf-dec-q">${i + 1}. ${esc(d.q)}</div>${body}</div>`;
   }
 
-  // The simulation screen. Before the vote it is always the old system; afterwards the frame and every step follow the deal.
-  function simScreen(side, after) {
-    const deal = after ? simDeal() : null;
-    const modern = after && ['b', 'c', 'd'].includes(deal.pkg);
-    const mine = !S.isHost && S.you.role === side;
-    const cov = after ? coverage(deal) : null;
-    const who = after
-      ? `Same ten steps, in ${deal.pkg === 'keep' ? 'the unchanged old system' : 'the system your hospital bought'}.`
-      : S.isHost ? `The ${side}'s ten steps` : mine ? 'Ten steps. One minute. Follow the "What to do" line on each one.' : `Try the ${side}'s ten steps yourself. As you go: ${esc(ROLES[S.you.role].observe)}`;
-    const title = !after
-      ? 'MedCore Legacy 9.4.1'
-      : deal.pkg === 'keep'
-        ? 'MedCore Legacy 9.4.1, no changes'
-        : `${PACKAGES[deal.pkg].seller} · ${PACKAGES[deal.pkg].name}${deal.pkg === 'd' && deal.modules.length ? ` + ${deal.modules.length} module${deal.modules.length === 1 ? '' : 's'}` : ''}`;
-    const banner = `<b>WHITFIELD, JAMES R</b> · 61 · liver transplant, day 6 · bed 6W-14 · 13:02`;
-    return `
-      <div class="ehr simwrap">
-        <div class="ehr-task">
-          <div><b>13:02 on 6 West${after ? ', replayed' : ''}.</b> ${who} <span class="sim-progress" data-simprogress></span></div>
-          <div class="ehr-task-timer" data-timer></div>
-        </div>
-        <div class="${modern ? 'after-window' : 'ehr-window'} simwin">
-          ${modern
-            ? `<div class="after-head">${esc(title)}<span class="after-score">${cov.full.size} of 15 problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}</span></div><div class="after-banner">${banner}</div>`
-            : `<div class="ehr-titlebar">${esc(title)} · RIVERBEND UNIV HOSP · PRD<span class="ehr-lagtag"> (Not Responding)</span></div>
-               <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Quality</span><span>Help</span></div>
-               <div class="ehr-banner">${banner} | MRN RUH-4471902 | Attending: Raman, P MD | Allergies/Intolerances: 1 active (see Allergy activity) | Isolation: PROTECTIVE | Sepsis Risk: 0.71 HIGH | In Basket: 140 unread | Outside records: 1 new (Media)${after && cov ? ` | ${cov.full.size} of 15 problems fixed` : ''}</div>`}
-          ${after ? `<div class="sim-guide"><b>How to read this:</b> each step shows what it took <span class="g-before">before</span> and the screen you use <span class="g-now">now</span>. Do the step, then check its tag: <span class="sim-tag fresh">NEW</span> fixed, <span class="sim-tag part">PARTLY FIXED</span>, <span class="sim-tag old">UNCHANGED</span> not fixed by your deal.</div>` : ''}
-          <div class="sim-body ${modern ? 'modern' : ''}">
-            <ol class="sim-steps" data-simsteps></ol>
-            <div class="sim-stage" data-simstage></div>
+  function sideShell() {
+    const side = document.getElementById('sim-side');
+    if (!side) return;
+    side.innerHTML = `
+      <div class="wf-sidetabs">
+        <button data-act="sim-side" data-side="pager" class="on">📟 Pager <span class="wf-badge" data-simbadge></span></button>
+        <button data-act="sim-side" data-side="notes"><span data-simnoteslabel>📝 Findings &amp; decisions</span></button>
+      </div>
+      <div class="wf-sidebody" data-sidepane="pager"><div id="sim-pager"></div></div>
+      <div class="wf-sidebody hidden" data-sidepane="notes">
+        <div class="wf-form">
+          <div class="wf-downtag hidden" data-simdowntag>DOWNTIME FORM — PAPER</div>
+          <div class="wf-label">Findings log: what you found, and on which screen</div>
+          <div class="wf-find">
+            <input data-test="finding-text" name="finding" maxlength="300" placeholder="What you found, e.g. tremor at 05:30">
+            <input data-test="finding-screen" name="screen" maxlength="60" list="sim-screens" placeholder="Screen">
+            <datalist id="sim-screens">${sim.conf.tabs.map(([, label]) => `<option value="${esc(label)}">`).join('')}</datalist>
+            <button class="ehr-btn sm" data-act="finding-add" data-test="finding-add">Add</button>
           </div>
-          ${modern ? '' : '<div class="ehr-status">Ready | 212 notes | 26 results | 22 orders | 8 consults | Lab interface: RETRYING | CAPS</div>'}
-          <div id="ehr-alert" class="ehr-alert"></div>
+          <ol class="wf-findings" data-findings></ol>
+          <label class="wf-label">Scratch notes
+            <textarea data-simnotes rows="3" maxlength="4000" placeholder="Anything else">${esc(sim.chart.notes)}</textarea>
+          </label>
+          <div class="wf-label">Decisions you own</div>
+          ${sim.conf.decisions.map(decisionHtml).join('')}
         </div>
       </div>`;
   }
 
-  // For the reveal: the ten steps and what each one was hiding.
-  function stepMap(side, reached) {
-    return `<div class="stepmap"><div class="eyebrow">THE TEN ${side.toUpperCase()} STEPS, AND WHAT EACH ONE WAS HIDING</div>${SCRIPT[side]
-      .map((st, k) => `<div class="stepmap-row ${k < reached ? 'got' : ''}"><span class="sim-dot">${k < reached ? '✓' : k + 1}</span><span>${esc(st.short)}</span><span class="stepmap-probs">${st.probs.map((id) => `<span class="pchip">${PROBLEM[id].n}. ${esc(PROBLEM[id].label)}</span>`).join('')}</span></div>`)
-      .join('')}</div>`;
+  function renderFindings() {
+    const el = document.querySelector('[data-findings]');
+    if (el) el.innerHTML = (sim.chart.findings || []).map((f) => `<li><b>${esc(f.at)}</b> · ${esc(f.screen || '—')} · ${esc(f.text)}</li>`).join('');
   }
 
-  // ---------- money and outcomes ----------
-
-  const pkgTitle = (id) => (id === 'keep' ? PACKAGES.keep.name : `PACKAGE ${PACKAGES[id].letter} · ${PACKAGES[id].name}`);
-  const byRank = () => [...PROBLEMS].sort((a, b) => S.problems[a.id].rank - S.problems[b.id].rank);
-  const inTier = (tier) => byRank().filter((p) => S.problems[p.id].tier === tier.k);
-  const isShared = (id) => S.shared.some((s) => s.id === id);
-  const termOffered = (t) => !t.gate || isShared(t.gate);
-
-  function scorecard(deal) {
-    const cov = coverage(deal);
-    return TIERS.map((tier) => {
-      const items = inTier(tier);
-      const fixed = items.filter((p) => cov.full.has(p.id)).length;
-      const chip = (p) => (cov.full.has(p.id) ? `<span class="pchip ok">✓ ${esc(p.label)}</span>` : cov.partial.has(p.id) ? `<span class="pchip part">◐ ${esc(p.label)}</span>` : `<span class="pchip no">✗ ${esc(p.label)}</span>`);
-      return `
-        <div class="score-tier ${tier.k}">
-          <div class="score-head"><span>${tier.label}</span><b>${fixed} of ${items.length} fixed</b></div>
-          ${items.map(chip).join('')}
-        </div>`;
-    }).join('');
+  function addFinding() {
+    const text = document.querySelector('[data-test=finding-text]');
+    const screen = document.querySelector('[data-test=finding-screen]');
+    if (!text || !text.value.trim()) return toast('Write what you found first.');
+    const tab = (sim.conf.tabs.find(([id]) => id === sim.tab) || [])[1] || '';
+    const sec = stepElapsed();
+    sim.chart.findings = [...(sim.chart.findings || []), { text: text.value.trim(), screen: screen.value.trim() || tab, at: SIM.clockAt(sec), t: Math.round(sec) }];
+    text.value = '';
+    screen.value = '';
+    renderFindings();
+    simSave();
   }
 
-  function dealBox(d) {
-    if (d.pkg === 'keep') return '<div class="deal"><div><small>CONTRACT</small><b>$0</b></div><div><small>STATUS QUO</small><b>$4.2M / year</b></div><div><small>GO-LIVE</small><b>never</b></div></div>';
-    const c = dealCost(d);
-    const pkg = PACKAGES[d.pkg];
-    const golive = d.pkg === 'd' && d.terms.includes('march') ? 'March 2028' : pkg.golive;
+  function sideTab(name) {
+    document.querySelectorAll('.wf-sidetabs [data-side]').forEach((b) => b.classList.toggle('on', b.dataset.side === name));
+    document.querySelectorAll('[data-sidepane]').forEach((p) => p.classList.toggle('hidden', p.dataset.sidepane !== name));
+    if (sim.down) {
+      document.querySelector('[data-simdowntag]')?.classList.remove('hidden');
+      const label = document.querySelector('[data-simnoteslabel]');
+      if (label) label.textContent = '📝 Downtime form';
+      document.getElementById('sim-side')?.classList.add('paper');
+    }
+  }
+
+  function decide(id, opt) {
+    const d = sim.conf.decisions.find((x) => x.id === id);
+    if (!d) return;
+    const value = sim.chart.decisions[id];
+    if (d.multi) {
+      const list = value || [];
+      sim.chart.decisions[id] = list.includes(opt) ? list.filter((x) => x !== opt) : [...list, opt];
+    } else if (value === opt) delete sim.chart.decisions[id];
+    else sim.chart.decisions[id] = opt;
+    const now = sim.chart.decisions[id];
+    document.querySelectorAll(`[data-act="sim-dec"][data-id="${id}"]`).forEach((b) => {
+      b.classList.toggle('on', d.multi ? (now || []).includes(b.dataset.opt) : now === b.dataset.opt);
+    });
+    simSave();
+  }
+
+  // ---------- chart screens ----------
+
+  function showTab(tab) {
+    sim.tab = tab;
+    document.querySelectorAll('#sim-tabs [data-tab]').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab));
+    refresh();
+    const body = document.getElementById('sim-body');
+    if (body) body.scrollTop = 0;
+  }
+
+  // Redraws the current tab in place, keeping the scroll position.
+  function refresh() {
+    const body = document.getElementById('sim-body');
+    if (!body) return;
+    const top = body.scrollTop;
+    body.innerHTML = VIEW[sim.tab]();
+    body.scrollTop = top;
+    if (sim.tab === 'results' && sim.labs) clue('labs');
+    if (sim.tab === 'flow') clue('vitals3');
+  }
+
+  function toggleOpen(key, clues) {
+    sim.open[key] = !sim.open[key];
+    if (sim.open[key] && clues) clue(...clues.split(' '));
+    refresh();
+  }
+
+  const box = (title, inner) => `<div class="ehr-box"><h4>${title}</h4>${inner}</div>`;
+  const list = (items) => `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>`;
+  const table = (head, rows) =>
+    `<table>${head ? `<tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr>` : ''}${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+  // A row that expands in place. `clues` are recorded when it opens.
+  const expander = (key, head, body, clues) => `
+    <div class="wf-x ${sim.open[key] ? 'open' : ''}">
+      <div class="wf-x-head" data-act="sim-open" data-key="${key}" data-clues="${clues || ''}">${sim.open[key] ? '▾' : '▸'} ${head}</div>
+      ${sim.open[key] ? `<div class="wf-x-body">${typeof body === 'function' ? body() : body}</div>` : ''}
+    </div>`;
+  const para = (html) => `<p class="wf-p">${html}</p>`;
+
+  const LABS = [
+    // name, range, values 09/24 → 09/28, today's redraw
+    ['Tacrolimus trough', '8–12 ng/mL', ['4.2 L', '5.1 L', '6.8 L', '9.6', '11.6*'], '19.4 H'],
+    ['Sodium', '135–145 mmol/L', ['136', '137', '135', '134 L', '134 L'], '133 L'],
+    ['Potassium', '3.5–5.1 mmol/L', ['4.4', '4.6', '4.7', '4.8', '5.0'], '6.2 H'],
+    ['CO2', '22–29 mmol/L', ['24', '23', '23', '22', '21 L'], '19 L'],
+    ['BUN', '7–20 mg/dL', ['24 H', '22 H', '21 H', '27 H', '34 H'], '58 H'],
+    ['Creatinine', '0.7–1.3 mg/dL', ['1.3', '1.3', '1.2', '1.4 H', '1.6 H'], '2.4 H'],
+    ['Glucose', '70–99 mg/dL', ['188 H', '204 H', '176 H', '219 H', '232 H'], '312 H'],
+    ['Magnesium', '1.7–2.2 mg/dL', ['1.6 L', '1.5 L', '1.4 L', '1.5 L', '1.4 L'], '1.3 L'],
+    ['WBC', '4.0–11.0 K/uL', ['9.8', '8.1', '7.2', '6.9', '8.4'], '13.1 H'],
+    ['Hemoglobin', '13.5–17.5 g/dL', ['8.9 L', '9.1 L', '9.0 L', '9.3 L', '9.2 L'], '8.8 L'],
+    ['Platelets', '150–400 K/uL', ['62 L', '71 L', '88 L', '104 L', '121 L'], '118 L'],
+    ['AST', '10–40 U/L', ['412 H', '210 H', '120 H', '78 H', '64 H'], '142 H'],
+    ['ALT', '7–56 U/L', ['520 H', '340 H', '210 H', '140 H', '110 H'], '168 H'],
+    ['Total bilirubin', '0.2–1.2 mg/dL', ['3.1 H', '2.4 H', '2.0 H', '1.6 H', '1.4 H'], '1.9 H'],
+    ['INR', '0.9–1.1', ['1.6 H', '1.4 H', '1.3 H', '1.2 H', '1.2 H'], '1.3 H'],
+    ['Lactate', '0.5–2.2 mmol/L', ['—', '—', '—', '—', '1.4'], '2.6 H'],
+  ];
+
+  const PROGRESS = (pod, level, change) =>
+    `S: No acute events overnight. Tolerating diet. Ambulating with PT. Pain controlled. Denies N/V. ` +
+    `O: Afebrile, VSS. A&Ox4. Abd soft, appropriately tender. Incision C/D/I. JP serosanguinous. Labs reviewed. Tacrolimus level ${level}. ` +
+    `A/P: 61M POD ${pod} s/p deceased-donor liver transplant, c/b CKD 3b, T2DM, AF, HTN, depression. Graft function improving, LFTs downtrending. ` +
+    `1) Immunosuppression: tacrolimus goal 8–12, ${change}. MMF 1 g BID. Prednisone taper. 2) ID prophylaxis: fluconazole, valganciclovir, TMP-SMX. ` +
+    `3) AF: rate controlled. Apixaban on hold; restart when cleared by surgery. 4) CKD 3b: creatinine stable. 5) T2DM: glargine + sliding scale. ` +
+    `6) Depression: continue sertraline. Dispo: anticipate discharge home 10/02. ` +
+    `[Pages 3–11: problem list, medication list, ROS and exam copied forward from prior notes.]`;
+
+  const NOTES = {
+    progress: [
+      { id: 'pod6', when: '09/29 07:40', head: 'Progress Note — Transplant Surgery (POD 6) — 11 pages', by: 'Resident', clue: 'stale', body: PROGRESS(6, '6.8 (subtherapeutic)', 'increase tacrolimus to 5 mg BID') },
+      { id: 'add', when: '09/29 11:06', head: 'Addendum to Progress Note', by: 'Resident', clue: 'ack1106', body: 'Alerts reviewed and acknowledged (5): Creatinine up ≥ 0.3 mg/dL in 48 h; Early warning score 4; Sepsis model score 0.38; Glucose > 300 mg/dL; Duplicate CBC order.' },
+      { id: 'pod5', when: '09/28 07:35', head: 'Progress Note — Transplant Surgery (POD 5) — 11 pages', by: 'Resident', clue: 'stale', body: PROGRESS(5, '6.8 (subtherapeutic)', 'increase tacrolimus 4 → 5 mg BID') },
+      { id: 'pod4', when: '09/27 07:30', head: 'Progress Note — Transplant Surgery (POD 4) — 10 pages', by: 'Resident', body: PROGRESS(4, '6.8 (subtherapeutic)', 'increase tacrolimus 3 → 4 mg BID') },
+      { id: 'pod2', when: '09/25 07:15', head: 'Progress Note — Transplant Surgery (POD 2) — 9 pages', by: 'Resident', body: PROGRESS(2, '4.2 (subtherapeutic)', 'increase tacrolimus 2 → 3 mg BID') },
+    ],
+    nursing: [
+      { id: 'rn1035', when: '09/29 10:35', head: 'Nursing Note — Day shift', by: 'P. Shah, RN', body: 'T 38.1. HR 104, irregular. Drowsy, oriented x2. 2 L nasal cannula started for SpO2 91%. EWS 4. Will reassess.' },
+      { id: 'rn0530', when: '09/29 05:30', head: 'Nursing Note — Night shift', by: 'K. Osei, RN', clue: 'tremor', body: 'Pt awake, fine tremor in both hands, states "my hands are shaky." A&Ox4. Will mention in report.' },
+      { id: 'rn1930', when: '09/28 19:30', head: 'Shift Assessment', by: 'K. Osei, RN', body: 'Pt A&Ox4. Lungs diminished at bases. Abd soft. Incision C/D/I. Voiding via Foley. Skin intact. Fall precautions in place. Pt education provided. Will continue to monitor.' },
+    ],
+    consults: [
+      { id: 'neph', when: '09/28 15:20', head: 'Consult — Nephrology', by: 'M. Brandt, MD', clue: 'neph', body: 'Rising creatinine, 1.2 → 1.6 in 48 hours, with tacrolimus climbing. Likely calcineurin-inhibitor toxicity. Recommendations: (1) <b>Hold tacrolimus if the trough is above 12 ng/mL</b>; check daily troughs. (2) Renal low-potassium diet. (3) Stop potassium supplements. (4) Avoid IV contrast if possible; discuss with us first.' },
+      { id: 'id', when: '09/26 10:05', head: 'Consult — Infectious Diseases', by: 'S. Kim, MD', clue: 'idc', body: 'Prophylaxis per liver protocol: fluconazole 400 mg daily, valganciclovir, TMP-SMX. <b>Fluconazole will raise tacrolimus levels 2 to 3 fold</b>: reduce the tacrolimus dose and check daily troughs. Interaction checking does not run on order-set items. Donor cultures are tracked in TransChart; we will review when final.' },
+      { id: 'xcover', when: '09/26 22:10', head: 'Cross-cover Note', by: 'J. Patel, MD', body: 'AF with RVR to 140s. Started diltiazem 60 mg PO q6h. Apixaban remains on hold per surgery.' },
+    ],
+    other: [
+      { id: 'pt', when: '09/28 14:00', head: 'Therapy Note — PT/OT', by: 'R. Alvarez, PT', clue: 'rehab', body: 'Unsteady gait, needs moderate assistance. Lives 90 miles away. <b>Recommend inpatient rehab, not discharge home.</b>' },
+      { id: 'diet', when: '09/28 16:30', head: 'Nutrition Assessment', by: 'Dietitian', clue: 'potassium', body: 'Weight 84 kg (per chart). Started a renal low-potassium diet (2 g/day) per nephrology. <b>Potassium conflict:</b> the potassium gluconate supplement (1,200 mg potassium daily) and the potassium replacement protocol are still active. Asked the team to review.' },
+      { id: 'cm', when: '09/28 09:00', head: 'Case Management', by: 'Case manager', body: 'Plan: discharge home 10/02 with daughter driving. Rehab not discussed.' },
+    ],
+  };
+
+  // Physician orders and MAR. `clue` is recorded when an order's details open.
+  const MEDS = [
+    { id: 'tac', text: 'tacrolimus 5 mg cap PO q12h', due: '21:00', last: 'Today 09:02', clue: 'stale',
+      detail: table(['Date', 'Dose', 'Trough that morning', 'Changed by'], [['09/23', '2 mg BID', '—', 'Protocol'], ['09/25', '3 mg BID', '5.1', 'Progress note POD 2'], ['09/27', '4 mg BID', '9.6', 'Progress note POD 4 (cites 6.8)'], ['09/28', '5 mg BID', '11.6 (resulted 23:41)', 'Progress note POD 5 (cites 6.8)']]) },
+    { id: 'mmf', text: 'mycophenolate mofetil 1,000 mg tab PO BID', due: '21:00', last: 'Today 09:02' },
+    { id: 'pred', text: 'predniSONE 20 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02' },
+    { id: 'fluc', text: 'fluconazole 400 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02', clue: 'ddi',
+      detail: para('Ordered 09/26 via the Liver Transplant Order Set. <b>Drug interaction checking: not run</b> for order-set items. No interaction alert fired.') },
+    { id: 'valgan', text: 'valGANciclovir 900 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02' },
+    { id: 'smx', text: 'sulfamethoxazole-trimethoprim 400-80 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02', detail: para('PJP prophylaxis. Trimethoprim can raise potassium.') },
+    { id: 'dilt', text: 'dilTIAZem 60 mg tab PO q6h', due: '13:00', last: 'Today 07:00' },
+    { id: 'apix', text: 'apixaban 5 mg tab PO BID — ON HOLD', due: 'On hold', last: '09/22', detail: para('Held since 09/22 (pre-op). Restart requires transplant surgery approval.') },
+    { id: 'ctx', text: 'cefTRIAXone 2 g IV q24h', due: 'Tomorrow 11:00', last: 'Today 11:20 (first dose)', detail: para('Started today for fever. Piperacillin-tazobactam avoided because of the penicillin allergy. Donor cultures: not available in MedChart.') },
+    { id: 'hep', text: 'heparin 5,000 units SC q8h', due: '14:00', last: 'Today 06:00' },
+    { id: 'glarg', text: 'insulin glargine 18 units SC nightly', due: '21:00', last: 'Yesterday 21:04' },
+    { id: 'lispro', text: 'insulin lispro sliding scale SC AC & HS', due: 'Now (glucose 312)', last: 'Today 07:40' },
+    { id: 'panto', text: 'pantoprazole 40 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02' },
+    { id: 'sert', text: 'sertraline 50 mg tab PO daily', due: 'Tomorrow 09:00', last: 'Today 09:02', detail: para('Imported from the March home medication list. Current outpatient dose per pharmacy: 100 mg.') },
+    { id: 'ondan', text: 'ondansetron 4 mg IV q8h PRN nausea', due: 'PRN', last: 'Today 06:40', detail: para('QT-prolonging.') },
+    { id: 'oxy', text: 'oxyCODONE 5 mg tab PO q4h PRN pain', due: 'PRN', last: 'Today 08:15' },
+    { id: 'apap', text: 'acetaminophen 650 mg tab PO q6h PRN (max 2 g/day)', due: 'PRN', last: 'Today 10:40' },
+    { id: 'docu', text: 'docusate 100 mg cap PO BID', due: '21:00', last: 'Today 09:02' },
+    { id: 'kglu', text: 'potassium gluconate (1,200 mg potassium) PO daily', due: '13:00', last: 'Yesterday 13:05', clue: 'potassium medlists',
+      detail: para('Source: home medication, imported from the March home medication list at admission. Conflicts with: <b>renal low-potassium diet</b> (09/28) and the <b>potassium replacement protocol</b>.') },
+    { id: 'kcl', text: 'potassium chloride replacement protocol: 20 mEq PO if K &lt; 4.0', due: 'Per protocol', last: '09/24', clue: 'potassium', detail: para('Active since admission order set 09/23. Not discontinued when the low-potassium diet started.') },
+    { id: 'mag', text: 'magnesium oxide 400 mg tab PO BID', due: '21:00', last: 'Today 09:02' },
+    { id: 'lr', text: "lactated Ringer's 75 mL/h IV continuous", due: 'Running', last: 'Bag hung 06:00' },
+  ];
+
+  // The nurse's medication pass. `fail` meds refuse to scan the first time.
+  const DUE = [
+    { id: 'lispro', text: 'insulin lispro 8 units SC (glucose 312)', due: 'NOW', fail: false },
+    { id: 'dilt', text: 'dilTIAZem 60 mg tab PO (HR 108, irregular; BP 108/66)', due: '13:00', fail: true },
+    { id: 'kglu', text: 'potassium gluconate (1,200 mg potassium) PO', due: '13:00', fail: true, clue: 'potassium' },
+  ];
+
+  const US_BODY = `
+    <p><b>EXAM:</b> US Doppler, liver transplant. 09/28 16:40. <b>COMPARISON:</b> 09/24.</p>
+    <p><b>FINDINGS:</b> Liver: normal echotexture. Biliary: no ductal dilatation. Portal vein: patent. Hepatic veins: patent, phasic.
+    Hepatic artery: peak systolic velocity <b>38 cm/s (09/24: 92 cm/s)</b>. Intrahepatic branches show <b>tardus-parvus waveforms</b>, resistive index <b>0.48 (09/24: 0.68)</b>.
+    Concerning for hepatic artery stenosis or thrombosis; correlation with CT angiography is recommended. No perihepatic collection.</p>
+    <p><b>IMPRESSION:</b> Transplanted liver with patent hepatic vasculature. No biliary dilatation. No perihepatic collection.</p>`;
+
+  const ECG = `
+    <svg class="wf-ecg" viewBox="0 0 600 80" preserveAspectRatio="none" aria-label="ECG tracing">
+      <polyline points="${Array.from({ length: 11 }, (_, i) => { const x = i * 55; return `${x},50 ${x + 14},50 ${x + 18},46 ${x + 22},50 ${x + 26},50 ${x + 28},56 ${x + 31},10 ${x + 34},62 ${x + 37},50 ${x + 42},50 ${x + 47},22 ${x + 52},50`; }).join(' ')}"/>
+    </svg>
+    <p><b>12-lead ECG, 09/29 06:12.</b> Irregular rhythm, rate 108. <b>Peaked T waves V2–V4.</b> QRS 96 ms, <b>QTc 492 ms</b>. Compared with 09/24: QTc was 438 ms.</p>
+    <p>Status: <b>awaiting physician review</b>.</p>`;
+
+  const FAX_PAGES = 84;
+  const FAX_ECOLI = 52;
+  function faxPage(n) {
+    const sections = [[1, 'Fax cover sheet'], [2, 'Discharge summaries 2019–2025'], [18, 'Clinic notes'], [34, 'Laboratory results'], [49, 'Microbiology'], [55, 'Imaging reports'], [68, 'Medication history'], [76, 'Consents and correspondence']];
+    const title = sections.filter(([from]) => from <= n).pop()[1];
+    let body;
+    if (n === 1) {
+      body = "<p><b>ST. MARY'S MEDICAL CENTER</b> · Health information management · FAX</p><p>To: Riverbend University Hospital, Liver Transplant<br>Re: WHITFIELD, JAMES · DOB 03/11/1965<br>Pages: 84 including cover</p><p>Records as requested. Scanned images; text is not searchable.</p>";
+    } else if (n === FAX_ECOLI) {
+      body = `<p><b>Urine culture, collected 03/14/2025. FINAL.</b></p><p><b>Escherichia coli, ESBL-producing</b>, &gt;100,000 CFU/mL.</p>
+        ${table(['Antibiotic', 'Result'], [['Ampicillin', 'R'], ['Ceftriaxone', '<b>R</b>'], ['Cefepime', 'R'], ['Ciprofloxacin', 'R'], ['Meropenem', 'S'], ['Ertapenem', 'S'], ['Nitrofurantoin', 'S']])}`;
+      clue('fax_ecoli');
+    } else {
+      let x = n * 131;
+      const filler = ['Reviewed.', 'Within normal limits.', 'See attached.', 'Not applicable.', 'Negative.', 'Unremarkable.', 'Copy for records.', 'Signed.'];
+      body = Array.from({ length: 8 }, (_, i) => {
+        x = (x * 1103515245 + 12345) % 2147483648;
+        return `<p>${title} — item ${(n * 7 + i) % 97 + 1}: ${filler[x % filler.length]}</p>`;
+      }).join('');
+    }
     return `
-      <div class="deal">
-        <div class="${c.over ? 'over' : 'under'}"><small>CONTRACT vs ${money(c.cap)} BUDGET</small><b>${money(c.total)}</b></div>
-        <div><small>ARRIVES AFTER SIGNING</small><b>+${money(c.after)}</b></div>
-        <div><small>GO-LIVE</small><b>${esc(golive)}</b></div>
+      <div class="wf-fax">
+        <div class="wf-fax-bar">
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="-10">« 10</button>
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="-1">‹ Prev</button>
+          <span>Page <b>${n}</b> of ${FAX_PAGES}</span>
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="1">Next ›</button>
+          <button class="ehr-btn sm" data-act="sim-fax" data-d="10">10 »</button>
+          <span class="wf-nosearch">🔍 Search unavailable: scanned image</span>
+        </div>
+        <div class="wf-fax-page"><div class="wf-fax-head">ST. MARY'S · ${title} · p. ${n}/${FAX_PAGES}</div>${body}</div>
       </div>`;
   }
 
-  // Costs that were never on the vendor's sheet. They land after signing; a team that published them saw them coming.
-  function surprises(d) {
-    if (d.pkg === 'keep') return [];
-    const pkg = PACKAGES[d.pkg];
-    const out = [];
-    const known = isShared('fi_after');
-    if (pkg.lost + pkg.old > 0) out.push(`${money(pkg.lost)} of lost revenue at go-live${pkg.old ? ` and ${money(pkg.old)} to keep the old system running during the switch` : ''}. ${known ? 'Finance had warned the room.' : 'Finance knew. Nobody asked.'}`);
-    if (pkg.lost > RESERVE) out.push(`Lost revenue was above the ${money(RESERVE)} cash reserve, so the hospital borrowed.`);
-    if (pkg.hidden) out.push(isShared('it_bhidden') ? `IT warned the room about ${money(pkg.hidden)} of servers and contractors. It was real.` : `${money(pkg.hidden)} of servers and contractors that IT knew about and nobody put on the table.`);
-    if (d.pkg === 'c' || d.pkg === 'd') {
-      if (!d.terms.includes('medcorefee')) out.push(TERM.medcorefee.missing);
-      if (!d.terms.includes('exitfee')) out.push(TERM.exitfee.missing);
-    }
-    return out;
-  }
+  const EWS = () => expander('ews', 'Early warning score: <b>5</b> at 12:30 (0 at 05:00)', para('Policy: EWS of 5 or more → notify the provider and consider rapid response. <b>Provider notified: not documented.</b>'), 'ews');
+  const VITALS = table(['Time', 'Temp', 'HR', 'BP', 'RR', 'SpO2', 'Neuro', 'EWS'], [
+    ['12:30', '38.1 H', '112 H irreg', '108/66', '22 H', '92% 2 L', 'A&O x2', '5'],
+    ['10:30', '38.1 H', '104 H', '118/70', '20', '91% RA → 2 L', 'A&O x2', '4'],
+    ['08:00', '37.4', '92', '128/76', '18', '96% RA', 'A&O x4', '1'],
+    ['05:00', '37.0', '84', '132/78', '16', '97% RA', 'A&O x4', '0'],
+  ]);
+  const WEIGHT = () => expander('weight', 'Weight: <b>85.3 kg</b> (09/29 05:00)', table(['Where it was typed', 'Value', 'By'], [['Admission navigator, 09/23', '84.0 kg', 'RN'], ['Vital signs flowsheet, 09/29 05:00', '85.3 kg', 'RN'], ['Nutrition assessment, 09/28', '84 kg ("per chart")', 'Dietitian']]) + para('Vitals and weight live in three places that do not talk to each other.'), 'vitals3');
 
-  function roleOutcome(role, d) {
-    const pkg = PACKAGES[d.pkg];
-    const lines = [];
-    const bad = [];
-    if (d.pkg === 'd') {
-      const governed = d.modules.includes('governance');
-      for (const m of MODULES.filter((x) => x.role === role)) {
-        if (!d.modules.includes(m.id)) bad.push(m.not);
-        else if (m.id === 'scribe' && !governed) bad.push('The AI scribe was bought, then shut down by compliance after 2 months: no governance, no AI.');
-        else lines.push(m.bought);
+  const notesView = () => {
+    const subs = [['progress', 'Progress'], ['nursing', 'Nursing'], ['consults', 'Consults'], ['other', 'Other']];
+    const bar = `<div class="wf-subtabs">${subs.map(([id, label]) => `<button class="${sim.notesTab === id ? 'on' : ''}" data-act="sim-notes" data-sub="${id}">${label} (${NOTES[id].length})</button>`).join('')}</div>`;
+    return box('Notes (showing 15 of 211)', bar + NOTES[sim.notesTab].map((n) =>
+      expander(`note:${n.id}`, `${n.when} — ${n.head} — ${n.by} — <i>signed</i>`, para(n.body), n.clue)).join(''));
+  };
+
+  const VIEW = {
+    summary() {
+      if (sim.side === 'nurse') {
+        return `
+          ${box('My patients (4)', table(['Bed', 'Patient', 'Needs now'], [
+            ['11', 'R. Ortiz, 72 F', 'Dressing change due 13:00'],
+            ['12', 'D. Brooks, 55 M', 'Asking for pain medicine'],
+            ['<b>14</b>', '<b>WHITFIELD, JAMES, 61 M</b> · protective isolation', 'Glucose 312, insulin due · fever 38.1 · 2 L O2'],
+            ['16', 'A. Chen, 80 F', 'Needs help to the bathroom'],
+          ]))}
+          ${box('Bed 14 — vitals today', VITALS + EWS())}
+          <div class="ehr-cols">
+            ${box('Handoff from the morning', para('"Surgery might change the tacrolimus." No new order seen. Daughter has called twice about the fever and the discharge date.'))}
+            ${box('Required assessments', para(`${sim.assessDone.size} of 9 documented. See Assessments.`))}
+            ${box('Bed 14 weight', WEIGHT())}
+          </div>`;
       }
-    }
-    for (const t of TERMS.filter((x) => x.role === role && x.applies.includes(d.pkg))) {
-      if (d.terms.includes(t.id)) lines.push(t.effect);
-      else if (t.missing) bad.push(t.missing);
-    }
-    if (role === 'finance' && d.pkg !== 'keep') {
-      const c = dealCost(d);
-      (c.over ? bad : lines).unshift(`Contract ${money(c.total)} against a ${money(c.cap)} budget${c.over ? `: ${money(c.total - c.cap)} over. The board made you find it elsewhere.` : `, with ${money(c.after)} more arriving after signing.`}`);
-    }
-    if (role === 'exec' && d.byExec) lines.unshift('No deal reached the votes it needed, so you decided. Every group that lost knows who to blame.');
-    if (role === 'patients' && d.pkg === 'd' && !d.modules.includes('portal') && !d.modules.includes('discharge')) bad.unshift('Nothing in the deal was built for patients. You were told "phase two."');
-    return `
-      <div class="outcard">
-        <div class="outcard-head">${ROLES[role].icon} ${ROLES[role].plural.toUpperCase()}</div>
-        <p>${esc(pkg.outcome[role])}</p>
-        ${lines.map((l) => `<p class="outcard-plus">＋ ${esc(l)}</p>`).join('')}
-        ${bad.map((l) => `<p class="outcard-minus">－ ${esc(l)}</p>`).join('')}
-      </div>`;
-  }
-
-  // ---------- role cards, coaching, and pitch cues ----------
-
-  const chips = (items, cls) => items.map((i) => `<span class="rc-chip ${cls}">${esc(i)}</span>`).join('');
-
-  // The whole role on one card: what you want, what to say, what you can give up, where you stop.
-  function roleCard(key) {
-    const r = ROLES[key];
-    const g = GROUPS[r.group];
-    return `
-      <div class="rolecard">
-        <div class="rolecard-head"><span class="rolecard-icon">${r.icon}</span> ${r.name}</div>
-        <p class="muted small">${esc(r.who)} · ${g.votes ? `${g.votes} of ${TOTAL_VOTES} votes${r.group === 'clinical' ? ', shared by nurses and physicians' : ''}` : 'no vote, but you set your own prices'}</p>
-        <div class="eyebrow">YOUR GOAL</div>
-        <p class="rolecard-priority">${esc(r.goal)}</p>
-        <div class="eyebrow">SAY THIS OUT LOUD</div>
-        <p class="rc-say">${esc(r.say)}</p>
-        <div class="rc-grid">
-          <div><div class="eyebrow ok">MUST HAVE</div>${chips(r.musts, 'ok')}</div>
-          <div><div class="eyebrow warn">CAN TRADE</div>${chips(r.trade, 'warn')}</div>
-          <div><div class="eyebrow bad">RED LINE</div>${chips(r.redline, 'bad')}</div>
+      return `
+        <div class="ehr-cols">
+          ${box('Problem List (17)', list(['Liver transplant status, deceased donor, 09/23', 'NASH cirrhosis — RESOLVED?', 'CKD stage 3b (N18.32)', 'CKD stage 3 (N18.30) — DUPLICATE', 'Type 2 diabetes with CKD', 'Type II diabetes w/o complication', 'Paroxysmal atrial fibrillation', 'Long-term anticoagulant use', 'Essential hypertension', 'Major depressive disorder', 'Thrombocytopenia', 'Ascites — pre-transplant', 'Hepatic encephalopathy — pre-transplant', 'Hepatocellular carcinoma — see pathology', 'Obesity', 'Leg cramps', 'Fever, unspecified']))}
+          <div class="ehr-box"><h4>Allergies (1)</h4>${list(['Penicillins — rash (childhood). Status: <b>unverified</b>.'])}
+            <h4>Today's plan (copied from progress note 07:40)</h4>${para('Graft improving. Continue current doses. Discharge home 10/02.')}</div>
+          ${box('Care Team', list(['Attending: R. Okafor, MD', 'Resident: YOU', 'Nephrology: M. Brandt, MD', 'ID: S. Kim, MD', 'Transplant pharmacy: L. Nguyen, PharmD', 'Primary RN: P. Shah']))}
         </div>
-        <p class="rc-lev"><b>Your leverage:</b> ${esc(r.leverage)}</p>
-      </div>`;
-  }
+        ${box('Vitals — today', VITALS + EWS() + WEIGHT())}
+        ${box('Labs — most recent', para(sim.labs ? 'Resulted 13:02. See Results.' : 'AM labs 09/29: specimen clotted. Redrawn 10:40. <b>Pending.</b>'))}`;
+    },
 
-  // Private facts. From Phase 2 on, any of them can be published to the whole room with one tap.
-  function secretsHtml(key) {
-    const r = ROLES[key];
-    const canShare = S.phase >= 2 && S.phase <= 5;
-    return `
-      <div class="private">
-        <div class="private-head">🔒 ONLY ${r.plural.toUpperCase()} KNOW</div>
-        ${r.secrets
-          .map((sec) => {
-            const shared = isShared(sec.id);
-            const offer = !!sec.unlocks;
-            const btn = shared
-              ? `<span class="sec-done">${offer ? 'On the table ✓' : 'Room knows ✓'}</span>`
-              : canShare
-                ? `<button class="btn sm" data-act="share" data-id="${sec.id}">${offer ? '🤝 Put on the table' : '📣 Tell the room'}</button>`
-                : '';
-            return `<div class="sec ${shared ? 'shared' : ''}"><span>${offer ? '🤝 ' : ''}${esc(sec.text)}</span>${btn}</div>`;
-          })
-          .join('')}
-        <p class="muted small">${r.group === 'vendor' ? 'An offer you put on the table appears on every ballot, and your rival sees it too. You cannot take it back.' : 'Only your team sees these. Publishing one puts it on the big screen for everyone. You cannot take it back.'}</p>
-      </div>`;
-  }
+    notes: notesView,
 
-  const VERDICT = { yes: 'SUPPORT', if: 'ONLY IF', no: 'OPPOSE', own: 'YOU SELL IT', rival: 'YOUR RIVAL' };
-  function packageLines(key) {
-    const st = STANCE[key];
-    return `<div class="private plain"><div class="private-head">WHERE YOU STAND ON EACH PACKAGE</div>
-      ${PACKAGE_ORDER.map((id) => `<p class="brief-line"><span class="pkg-letter p${id}">${PACKAGES[id].letter}</span><span class="verdict v-${st[id][0]}">${VERDICT[st[id][0]]}</span><span>${st.best === id ? '<b>Your best choice.</b> ' : ''}${esc(st[id][1])}</span></p>`).join('')}
-      <p class="muted small">This is a starting position, not an order. You may be persuaded.</p></div>`;
-  }
+    results() {
+      const dates = ['09/24', '09/25', '09/26', '09/27', '09/28', '09/29'];
+      const rows = LABS.map(([name, range, past, now], i) =>
+        `<tr><td>${name}</td>${past.map((v) => `<td>${v}</td>`).join('')}${sim.labs ? `<td>${now}</td>` : i === 0 ? '<td rowspan="99" class="wf-pending">Clotted 06:10<br>Redrawn 10:40<br><b>PENDING</b></td>' : ''}<td>${range}</td></tr>`
+      ).join('');
+      return `
+        ${box('Results — chemistry, hematology, drug levels', `<table><tr><th>Component</th>${dates.map((d) => `<th>${d}</th>`).join('')}<th>Ref range</th></tr>${rows}</table>${para(`* Resulted 09/28 23:41.${sim.labs ? ' 09/29: redrawn 10:40, resulted 13:02.' : ''}`)}`)}
+        ${box('Pathology (1)', expander('path', '09/27 — Explant pathology — FINAL', para('Cirrhotic liver. Treated hepatocellular carcinoma, 2.1 cm, segment 8, fully necrotic. <b>A second, previously unknown HCC, 1.4 cm, segment 6</b>, margins negative. Discussed with patient: not documented. Family: not informed.'), 'pathology'))}
+        ${box('Microbiology', table(['Collected', 'Test', 'Status'], [['09/29 11:05', 'Blood culture x2', 'In process'], ['—', 'Donor cultures', 'Not available in MedChart (see Transplant Module)']]))}`;
+    },
 
-  // ---------- how to play, seat by seat ----------
-  function howToPlay() {
-    if (S.isHost) {
-      const part = (title, items) => `<div class="how-part"><div class="how-head">${title}</div><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol></div>`;
-      return `<div class="howto"><h2>📖 How to host</h2>
-        ${part('GETTING STARTED', ['Put this window on the projector.', 'Players open the address shown in the lobby, click <b>JOIN GAME</b>, and type the room code.', 'Each player taps <b>Assign me randomly</b>, or you click <b>RANDOMIZE EVERYONE BY THE SEAT PLAN</b>.', 'Click <b>BEGIN</b> when every seat has someone.'])}
-        ${part('DURING THE GAME', ['<b>NEXT</b> moves every screen forward. Players\' screens follow yours.', 'The <b>Facilitator</b> strip under the top bar tells you what to say and do in each part.', '<b>+1 MIN</b> and <b>RESTART TIMER</b> adjust the countdown. <b>BACK</b> returns one part.', 'In "Must fix", drag cards between the three columns as the room decides.', 'In "Replay", click through the ten steps yourself, and use the <b>Screen</b> and <b>System</b> buttons to compare packages.'])}
-        ${part('AT THE END', ['Click <b>FEEDBACK (CSV)</b> to download the forms before you close the game.', 'Closing the server ends the game. Nothing is saved.'])}
-      </div>`;
-    }
-    const key = S.you.role;
-    const r = ROLES[key];
-    const g = GROUPS[r.group];
-    const clin = r.group === 'clinical';
-    const vendor = r.group === 'vendor';
-    const part = (phases, title, items) => `<div class="how-part ${phases.includes(S.phase) ? 'now' : ''}"><div class="how-head">${title}${phases.includes(S.phase) ? ' <span>YOU ARE HERE</span>' : ''}</div><ol>${items.filter(Boolean).map((i) => `<li>${i}</li>`).join('')}</ol></div>`;
-    const before = [
-      clin
-        ? '<b>Phase 1:</b> you use the old system. Read the "What to do" line on each step, then click. Dismiss every alert to keep going. You have one minute and ten steps.'
-        : `<b>Phase 1:</b> you watch the ${r.side} screen on your own device. ${esc(r.observe)}`,
-      '<b>Phase 2, on your own:</b> tap every problem you hit or saw. A tick appears.',
-      vendor
-        ? '<b>Phase 2, one list:</b> you may not speak. Your screen shows who starred each problem and which package or module fixes it.'
-        : `<b>Phase 2, one list:</b> tap the star on the three problems that matter most to ${g.short.toLowerCase()}.`,
-      vendor ? '' : '<b>Phase 2, must fix:</b> if you have a star beside your name, you are your team\'s representative. Drag cards between the three columns, or tap a card and then a column.',
-    ];
-    const pitch = vendor
-      ? ['The hospital presents its list first. Your two cue cards are on your screen.', 'When your package is highlighted you have one minute. Say three problems it fixes, the price and date, and one honest gap.', 'When your rival is pitching, your screen shows a line of attack. Save it for Phase 4.']
-      : ['Listen. Questions wait until Phase 4.', 'Each package card shows the price, what is left of the budget, how it switches on, what is not included, and the catch.', ...r.ask.slice(0, 2).map((q) => `Hold this question: ${esc(q)}`)];
-    const deal = vendor
-      ? ['Under "Only ' + esc(r.plural) + ' know", tap <b>Put on the table</b> beside an offer. It then appears on every ballot and on the big screen. You cannot take it back.', 'Visit the tables. Find out what each group needs before you offer anything.', 'You have no vote. You win when five hospital votes land on one of your packages.']
-      : [
-        'Under <b>Your position</b>, tap a package.',
-        'If you tapped D, tick the modules you want bought.',
-        'Tick the contract terms you want. A vendor\'s offer only appears after that vendor puts it on the table, so go and ask.',
-        `Watch the <b>YOUR DEAL</b> bar. Anything that pushes the contract over ${money(CAP)} is not bought.`,
-        key === 'finance' ? `<b>Only your team can approve the stretch to ${money(STRETCH_CAP)}.</b> A green card on your screen shows who is asking and a checklist. Tick the stretch only if it makes sense.` : '',
-        key === 'exec' || clin ? `If your deal is over budget, an amber card appears. Tick <b>Stretch the budget to ${money(STRETCH_CAP)}</b> and go to the finance table with a reason.` : '',
-        key === 'exec' ? 'With two minutes left, announce which deals go to the vote. Three at most.' : '',
-        'To publish one of your private facts to the whole room, tap <b>Tell the room</b> beside it.',
-        `<b>Phase 5:</b> the same ballot becomes your vote. ${g.short} cast ${g.votes === 2 ? '2 votes' : '1 vote'} as a block for whatever most of you choose. A deal needs ${PASS} of ${TOTAL_VOTES}.`,
+    mar() {
+      if (sim.side === 'nurse') {
+        const cell = (m) => {
+          const state = sim.chart.mar[m.id];
+          if (state === 'given') return '<span class="mar-given">Given ✓</span>';
+          if (state === 'held') return '<span class="mar-held">Held</span>';
+          if (sim.open[`fail:${m.id}`]) return `<span class="mar-fail">Barcode not recognized.</span> <button class="ehr-btn sm" data-act="sim-mar" data-med="${m.id}" data-op="give">Override</button>`;
+          return `<button class="ehr-btn sm" data-act="sim-mar" data-med="${m.id}" data-op="scan">Scan</button> <button class="ehr-btn sm" data-act="sim-mar" data-med="${m.id}" data-op="hold">Hold</button>`;
+        };
+        const due = DUE.map((m) => `<tr><td>${m.clue ? expander(`due:${m.id}`, m.text, para('Diet order: <b>renal, low potassium</b> (09/28). Also active: <b>potassium replacement protocol</b>, 20 mEq if K &lt; 4.0.'), m.clue) : m.text}</td><td>${m.due}</td><td>${cell(m)}</td></tr>`).join('');
+        const later = MEDS.filter((m) => !DUE.some((d) => d.id === m.id)).map((m) => `<tr><td>${m.text}</td><td>${m.due}</td><td>${m.last}</td></tr>`).join('');
+        return box('MAR — due 12:45 to 13:05 — scan each medication to document', `<table><tr><th>Medication</th><th>Due</th><th>Action</th></tr>${due}</table>`) +
+          box('Scheduled later / PRN', `<table><tr><th>Medication</th><th>Next due</th><th>Last given</th></tr>${later}</table>`) +
+          box('Tacrolimus', para('tacrolimus 5 mg PO due 21:00. <b>No new order</b> since this morning\'s handoff ("surgery might change the tacrolimus").'));
+      }
+      const rows = MEDS.map((m) => {
+        const key = `med:${m.id}`;
+        const open = sim.open[key];
+        return `<tr class="wf-row ${open ? 'open' : ''}" data-act="sim-open" data-key="${key}" data-clues="${m.clue || ''}"><td>${open ? '▾' : '▸'} ${m.text}</td><td>${m.last}</td><td>${m.due}</td></tr>` +
+          (open ? `<tr class="wf-detail"><td colspan="3">${m.detail || para('No additional order details.')}</td></tr>` : '');
+      }).join('');
+      return box('Active medication orders (22) — click an order for details', `<table><tr><th>Medication</th><th>Last given</th><th>Next due</th></tr>${rows}</table>`) + VIEW.orders();
+    },
+
+    orders() {
+      return `<div class="ehr-cols">
+        ${box('Diet', list(['Renal, low potassium (2 g/day) — since 09/28 (nephrology)']))}
+        ${box('Nursing', list(['Vital signs q4h', 'Telemetry — not ordered', 'Protective isolation', 'Strict I&O', 'Fall precautions']))}
+        ${box('Other', list(['Expected discharge: 10/02 — home', 'Consult: nephrology — following', 'Consult: PT/OT — seen 09/28', 'ECG 09/29 06:12 — completed, unsigned', 'Labs 09/29 — redraw pending']))}
+      </div>` + (sim.side === 'nurse' ? box('Potassium orders (3 active)', list(['potassium gluconate (1,200 mg potassium) PO daily', 'potassium chloride replacement protocol: 20 mEq PO if K &lt; 4.0', 'Diet: renal, low potassium']) + expander('kconf', 'Why are there three?', para('The supplement came from the imported home list, the protocol from the admission order set, and the diet from nephrology. Nothing reconciled them.'), 'potassium')) : '');
+    },
+
+    medrec() {
+      const march = ['apixaban 5 mg BID', 'metoprolol 25 mg BID', 'furosemide 40 mg daily', 'spironolactone 50 mg daily', 'potassium gluconate 1,200 mg daily ("for leg cramps")', 'insulin glargine 30 units nightly', 'sertraline 50 mg daily'];
+      return box('Admission medication reconciliation — imported list', para('<b>Source: outpatient clinic list, March 2026</b> (auto-imported 09/23). Status: reconciled by pharmacy technician.') + list(march)) +
+        box('Other sources (2) — pharmacist flag', expander('ml', '⚠ Pharmacist: three home medication lists conflict', `
+          <div class="ehr-cols">
+            ${box('Pharmacy fill history, September 2026', list(['apixaban 5 mg BID', 'metoprolol 25 mg BID', 'furosemide 40 mg daily', 'insulin glargine 18 units nightly', 'sertraline 100 mg daily']))}
+            ${box("Daughter's handwritten list (scanned, Media)", list(['blood thinner twice a day', 'water pill', 'insulin 18 at night', 'sertraline 100', '"potassium pills — STOPPED in May"', '"spironolactone stopped by kidney doctor"']))}
+            ${box('Imported March list', list(march))}
+          </div>${para('The EHR imported the oldest list. The potassium supplement and the old doses came from it.')}`, 'medlists'));
+    },
+
+    imaging() {
+      return box('Imaging (3)', [
+        expander('img:cxr', '09/29 07:10 — XR chest portable — FINAL — Impression: Right basilar opacity, atelectasis vs early consolidation. Small bilateral effusions.', para('Lines: right PICC tip at the cavoatrial junction.')),
+        expander('img:us', '09/28 16:40 — US Doppler liver transplant — FINAL — Impression: Transplanted liver with patent hepatic vasculature.', `<div class="wf-p">${US_BODY}</div>`, 'us_body'),
+        expander('img:us0', '09/24 08:15 — US Doppler liver transplant — FINAL — Impression: Normal post-transplant Doppler.', para('Hepatic artery PSV 92 cm/s, RI 0.68.')),
+      ].join(''));
+    },
+
+    media() {
+      const fax = sim.faxIn
+        ? [expander('media:fax', `${SIM.clockAt(SIM.FAX_AT)} today — Fax: St. Mary's Medical Center — 84 pages — scanned image — <b>Unsigned</b>`, () => faxPage(sim.fax))]
+        : [];
+      return box(`Media (${8 + fax.length})`, [
+        ...fax,
+        expander('media:ecg', '09/29 06:12 — ECG 12-lead — <b>Awaiting physician review</b>', ECG, 'ecg'),
+        expander('media:fill', '09/23 — Pharmacy fill history, September 2026 (Valley Pharmacy, faxed)', list(['apixaban 5 mg BID', 'metoprolol 25 mg BID', 'furosemide 40 mg daily', 'insulin glargine 18 units nightly', 'sertraline 100 mg daily', 'No potassium filled since May']), 'medlists'),
+        expander('media:list', "09/23 — Home medication list, handwritten by daughter (scan)", para('"Dad\'s pills: blood thinner twice a day, water pill, insulin 18 at night, sertraline 100. Potassium pills — STOPPED in May."'), 'medlists'),
+        ...['09/23 — Consent: liver transplant', '09/23 — Consent: blood products', '09/23 — Insurance card (front/back)', '09/23 — Photo ID', '09/22 — Referral letter'].map((t, i) => expander(`media:x${i}`, t, para('Scanned document. 1 page.'))),
+      ].join(''));
+    },
+
+    transplant() {
+      if (sim.tx === 0) {
+        return box('Transplant Module', para('<b>TransChart 3.2</b> is a separate application. Donor, organ and transplant-coordinator data do not flow into MedChart.') + para('<button class="ehr-btn sm" data-act="sim-tx">Launch TransChart</button>'));
+      }
+      if (sim.tx === 1) {
+        return box('TransChart 3.2 — Sign in', para('Username: <input value="riverbend\\you" disabled> Password: <input type="password" value="password" disabled>') + para('<button class="ehr-btn sm" data-act="sim-tx">Log in</button> <span class="small">(single sign-on not supported)</span>'));
+      }
+      if (sim.side === 'nurse') return box('TransChart 3.2', para('<b>Access denied.</b> Your role (RN) does not have TransChart access. Contact the transplant coordinator.'));
+      clue('donor');
+      return box('TransChart 3.2 — Donor GLD-26-8817', table(null, [['Donor', '34 M, anoxic brain injury'], ['CMV / EBV', 'Positive / positive'], ['Organ', 'Whole liver, cold ischemia 7 h 40 min']]) +
+        para('<b>Donor bronchoalveolar lavage, collected 09/21. FINAL 09/27.</b> <b>Klebsiella pneumoniae, ESBL-producing</b>, &gt;100,000 CFU/mL.') +
+        table(['Antibiotic', 'Result'], [['Ceftriaxone', '<b>R</b>'], ['Cefepime', 'R'], ['Piperacillin-tazobactam', 'I'], ['Meropenem', 'S'], ['Ertapenem', 'S'], ['TMP-SMX', 'R']]) +
+        para('Recipient team notified: auto-fax 09/27 to the transplant office (fax number on file is out of date).'));
+    },
+
+    flow() {
+      const forms = [
+        ['vitals', 'Vital signs flowsheet', ['Temp', 'HR', 'BP', 'RR', 'SpO2', 'O2 device']],
+        ['ews', 'Early warning score calculator (re-enter vitals)', ['Temp', 'HR', 'Systolic BP', 'RR', 'SpO2', 'Level of consciousness']],
+        ['weight', 'Admission navigator: weight and I&O', ['Weight (kg)', 'Intake (mL)', 'Urine output (mL)']],
       ];
-    const after = ['The decision appears on every screen.', '<b>Replay:</b> do the same ten steps in the new system. Each step shows BEFORE and NOW, a "What to do" line, and a tag: NEW, PARTLY FIXED, or UNCHANGED.', 'Read what happened to your group, then answer six short questions.'];
-    return `<div class="howto"><h2>📖 How to play: ${esc(r.plural)}</h2>
-      <p class="how-goal"><b>Your goal:</b> ${esc(r.goal)}</p>
-      ${part([0, 1, 2], 'BEFORE THE VENDORS COME IN', before)}
-      ${part([3], 'WHEN THE VENDORS PITCH', pitch)}
-      ${part([4, 5], 'NEGOTIATION AND VOTE', deal)}
-      ${packageLines(key)}
-      ${part([6, 7], 'AFTER THE DECISION', after)}
-    </div>`;
-  }
+      return box('Vitals and early warning score — today', VITALS + EWS()) + forms.map(([id, title, fields]) => {
+        const saved = sim.chart.flow.includes(id);
+        const vals = sim.flowVals[id] || {};
+        return box(`${title}${saved ? ' — <span class="mar-given">saved ✓</span>' : ''}`, `
+          <div class="wf-flow">${fields.map((f) => `<label>${f}<input data-flow="${id}" data-field="${esc(f)}" value="${esc(vals[f] || '')}" ${saved ? 'disabled' : ''}></label>`).join('')}</div>
+          ${saved ? '' : `<p class="wf-p"><button class="ehr-btn sm" data-act="sim-flow" data-form="${id}">Save</button> All fields required.</p>`}`);
+      }).join('');
+    },
 
-  const spokesperson = () => S.reps.nurse || S.reps.physician || S.reps.exec || null;
+    assess() {
+      return box(`Required assessments — ${sim.assessDone.size} of 9 documented this shift`, table(['Assessment', 'Status'], sim.conf.assessments.map((a) => [
+        a, sim.assessDone.has(a) ? '<span class="mar-given">Documented ✓</span>' : `<button class="ehr-btn sm" data-act="sim-assess" data-name="${esc(a)}">Document</button>`,
+      ])));
+    },
+  };
 
-  // One strip at the top of every participant screen: what to do in this part, in this role.
-  function coach() {
-    const role = S.you.role;
-    const r = ROLES[role];
-    const g = GROUPS[r.group];
-    const clin = r.group === 'clinical';
-    const vendor = r.group === 'vendor';
-    let lines = [];
-    switch (S.step) {
-      case 'p1_intro':
-        lines = clin ? ['You have one minute and ten steps. Get as far as you can.', 'Notice everything that gets in your way.'] : [`You watch the ${r.side} screen. Do not help them.`, r.observe];
-        break;
-      case 'p2_notes':
-        lines = vendor ? ['Work alone and in silence.', 'Tick every problem you could sell a fix for.'] : ['Work alone. No talking yet.', 'Tick every problem you hit or saw.', clin ? '' : `Remember your watching task: ${r.observe}`];
-        break;
-      case 'p2_merge':
-        lines = vendor
-          ? ['Listen. Vendors may not speak in this phase.', 'Watch which group stars which problem. That is who you sell to.']
-          : ['Now talk, as one hospital. Compare what you noticed.', `Star the ${TOP_PICKS} problems that matter most to ${g.short.toLowerCase()}. Each person stars on their own device.`, 'The top of the list shows the problems closest to your must-haves, and why. You may star others.', ...r.raise];
-        break;
-      case 'p2_top3':
-        lines = vendor
-          ? ['Still listening. Match the must-fix column to your packages.']
-          : role === 'exec'
-            ? ['You referee. Get the room to its must-fix problems.', 'Ask the facilitator to move a card between columns.']
-            : ['Argue for what belongs in MUST FIX.', `The hospital's spokesperson for the pitchfest is ${spokesperson() || 'chosen now'}.`];
-        break;
-      case 'p3_hospital':
-        lines = vendor ? ['Listen to the hospital\'s list.', 'Your pitch cards are below. One minute per package is coming.'] : [`${spokesperson() || 'Your spokesperson'} presents the list for two minutes.`, 'Everyone else: stay quiet and watch the vendors react.'];
-        break;
-      case 'p3_pitch':
-        lines = vendor ? ['You pitch your two packages, one minute each. Your rival pitches the other two.', 'Follow the cue card: three fixes, price and date, one honest gap.'] : ['Listen. Questions wait until Phase 4.', ...r.ask.map((q) => `Hold this question: ${q}`)];
-        break;
-      case 'p4_intra':
-        lines = vendor
-          ? ['Inside your team: decide which offers to put on the table, and for whom.', 'An offer you publish appears on every ballot. Your rival vendor is planning the same thing.']
-          : ['Inside your team only. Do not visit other tables yet.', 'Agree your must-haves, what you will trade, and your red line.', 'Set your position below. It is a straw vote and can change.'];
-        break;
-      case 'p4_inter':
-        lines = vendor
-          ? ['Visit every table. Find out who needs what, and what your rival has offered them.', 'Put an offer on the table when it wins you a vote.']
-          : [`Go to other tables. A deal needs ${PASS} of ${TOTAL_VOTES} votes.`, 'Publish one of your private facts when it helps your case.', 'Update your position as deals form.'];
-        break;
-      case 'p5_vote':
-        lines = vendor
-          ? ['You do not vote. Watch the room.']
-          : ['Vote on your own device.', `${g.short} cast${g.votes === 2 ? ' 2 votes' : ' 1 vote'} as a block: the package most of you choose.`, 'Be ready to say your vote and one reason in 30 seconds.'];
-        break;
-      case 'lobby':
-        lines = ['Read your role card below. It is your character for the whole game.', 'Tap "How to play your seat" for a step-by-step guide.', 'Then wait. The facilitator starts the game for everyone.'];
-        break;
-      case 'p6_decision':
-        lines = vendor
-          ? ['The hospital has decided. Find out if it chose one of your packages.', 'The CEO will announce it to you. Say out loud whether you accept.']
-          : role === 'exec'
-            ? ['Your CEO announces the decision to the vendors, out loud.', 'If no deal reached the votes it needed, your group decided. Explain why.', 'Check what the money did not cover. It is listed in red.']
-            : ['See which package won, and with how many votes.', 'Check which modules and terms made it in, and which the money did not cover (in red).', 'Listen for the vendors to accept or refuse.'];
-        break;
-      case 'p6_outcome':
-        lines = ['Find your own card. It is the first one, outlined.', 'Green lines are what your group won. Red lines are what it cost you.', 'Be ready to read your card to the room if you are asked.'];
-        break;
-      case 'p6_reflect':
-        lines = ['Answer the six questions on your own.', 'Your answers save as you type. There is no submit button.'];
-        break;
-      case 'debrief':
-        lines = ['Put your device down and join the discussion.', 'The questions are on the big screen.', 'You can still finish your feedback form below.'];
-        break;
-      case 'reveal_cards':
-      case 'reveal_point':
-        lines = ['Look at the big screen. There is nothing to click.'];
-        break;
-      default:
-        return '';
-    }
-    return `<div class="coach"><div class="coach-head">${r.icon} YOUR JOB RIGHT NOW</div><ul>${lines.filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p class="coach-lost">Lost? Tap <b>How to play</b> at the top right for your full guide.</p></div>`;
-  }
-
-  // Vendor cue card: the three highest-ranked problems this package fixes, the price, and one honest gap.
-  function pitchCue(id) {
-    const pkg = PACKAGES[id];
-    const cov = coverage({ pkg: id, modules: [] });
-    const top = byRank().filter((p) => cov.full.has(p.id)).slice(0, 3);
-    const c = dealCost({ pkg: id });
+  function simChart() {
+    const conf = SIM.SIDES[mySimSide()];
+    const shadow = S.you.role === mySimSide() ? '' : `<span class="ehr-shadow">You are shadowing the ${mySimSide()} team.</span> `;
     return `
-      <div class="cue p${id}">
-        <div class="cue-head"><span class="pkg-letter p${id}">${pkg.letter}</span> ${pkg.name} <small>pitched by ${esc(pkg.seller)}</small></div>
-        <ol>
-          <li><b>"It fixes</b> ${top.length ? top.map((p) => esc(p.label.toLowerCase())).join(', ') : 'your alert problem'}<b>."</b> <span class="muted small">(the top problems on their list that this package covers)</span></li>
-          <li><b>"It costs ${money(pkg.price)}</b>${id === 'd' ? ' for the core, plus the modules you choose' : ''}<b>, and goes live ${esc(pkg.golive)}."</b> <span class="muted small">Your angle: ${esc(pkg.frame.toLowerCase())}. ${esc(pkg.stance)}</span></li>
-          <li><b>"What it does not do:</b> ${esc(pkg.leaves)}<b>"</b></li>
-        </ol>
-        <p class="muted small">Private: ${esc(ROLES[SELLERS[pkg.seller]].brief[id])}</p>
+      <div class="ehr wf">
+        <div class="ehr-task">
+          <div>${shadow}${conf.task}</div>
+          <div class="wf-clocks"><span class="wf-clock">🕐 <b data-simclock></b></span><span class="ehr-task-timer" data-timer></span></div>
+        </div>
+        <div class="wf-grid">
+          <div class="ehr-window">
+            <div class="ehr-titlebar">MedChart Enterprise 9.4.1 — RIVERBEND UNIVERSITY HOSPITAL — PRD — [${mySimSide() === 'nurse' ? 'Nursing Workspace' : 'Chart Review'}]</div>
+            <div class="ehr-menu"><span>File</span><span>Edit</span><span>View</span><span>Patient</span><span>Orders</span><span>Tools</span><span>Reports</span><span>Billing</span><span>Help</span></div>
+            <div class="ehr-banner">
+              <b>WHITFIELD, JAMES</b> | 61 y.o. M | DOB 03/11/1965 | MRN 007731905 | 6 West bed 14 | POD 6 s/p deceased-donor liver transplant |
+              Attending: Okafor, R MD | Code: FULL | Isolation: PROTECTIVE | Allergies/Intolerances: 1 active (see Allergy activity) |
+              Expected discharge: 10/02 | Readmit risk: 31% | In Basket: 63 unread
+            </div>
+            <div class="ehr-tabs" id="sim-tabs">${conf.tabs.map(([id, label]) => `<button data-act="sim-tab" data-tab="${id}">${label}</button>`).join('')}</div>
+            <div class="ehr-scroll" id="sim-body"></div>
+            <div class="ehr-status">Ready | 211 notes | results pending | 22 active med orders | User: YOU | <span data-simclock></span> | CAPS</div>
+            <div id="sim-alert" class="ehr-alert"></div>
+            <div id="sim-down" class="wf-down"></div>
+          </div>
+          <aside class="wf-side" id="sim-side"></aside>
+        </div>
       </div>`;
   }
 
-  const missedBanner = (side) => `
-    <div class="missed">
-      <div class="eyebrow dark">${side === 'physician' ? 'ON THE PHYSICIAN SCREEN' : 'ON THE NURSE SCREEN'}</div>
-      <div class="missed-row">${SIM[side].missed}</div>
-      <div class="small">Advisory #${critNumber(side)} of ${ALERTS[side].length} in under a minute. It looked exactly like "${SIM[side].lookalike}."</div>
-      <div class="small">${SIM[side].truth}</div>
-    </div>`;
+  // ---------- clock-driven markers: discussion sub-steps and the current pitch ----------
 
-  // Who may move cards between the three columns: the facilitator and each hospital team's representative.
-  let picked = null;
-  const boardMovable = () => (S.step === 'p2_top3' || S.step === 'p3_hospital') && (S.isHost || (S.you.isRep && S.you.votes));
-  const moveCard = (problem, tier) => {
-    picked = null;
-    if (S.problems[problem] && S.problems[problem].tier !== tier) {
-      S.problems[problem].tier = tier; // move at once; the server confirms
-      act('tier', { problem, tier });
+  const SUBSTEPS = [[0, 'Clinical pitch', 3], [180, 'Reactions', 5], [480, 'Priorities', 2]];
+  const substepsHtml = () => `<ol class="substeps" data-substeps>${SUBSTEPS.map(([from, label, min]) => `<li data-from="${from}">${label} · ${min} min</li>`).join('')}</ol>`;
+  function substepTick() {
+    const list = document.querySelector('[data-substeps]');
+    if (!list) return;
+    const e = stepElapsed();
+    const items = [...list.children];
+    const current = items.filter((li) => Number(li.dataset.from) <= e).pop();
+    items.forEach((li) => (li === current ? li.setAttribute('aria-current', 'step') : li.removeAttribute('aria-current')));
+  }
+
+  // Five 1-minute pitches, then the lightning questions.
+  function pitchTick() {
+    if (S.step !== 'p4_pitch') return;
+    const slot = Math.floor(stepElapsed() / 60);
+    const letter = PACKAGE_ORDER[slot] || null;
+    document.querySelectorAll('[data-pkg-card]').forEach((card) => {
+      const on = card.dataset.pkgCard === letter;
+      card.classList.toggle('current', on);
+      if (on) card.setAttribute('aria-current', 'true');
+      else card.removeAttribute('aria-current');
+    });
+    const now = document.querySelector('[data-pitchnow]');
+    if (now) now.textContent = letter ? `${letter}. ${PACKAGES[letter].name}` : 'Lightning questions';
+  }
+
+  // ---------- Phase 2: the quiz ----------
+
+  function quizNow() {
+    const e = stepElapsed();
+    const idx = Math.max(0, Math.min(QUIZ.length - 1, Math.floor(e / QUIZ_SECONDS)));
+    const inQ = e - idx * QUIZ_SECONDS;
+    return { idx, q: QUIZ[idx], reveal: inQ >= QUIZ_ANSWER_SECONDS, left: Math.max(0, Math.ceil(QUIZ_ANSWER_SECONDS - inQ)) };
+  }
+
+  let quizKey = null;
+  function quizTick() {
+    if (!S || S.step !== 'p2_quiz') return;
+    const now = quizNow();
+    const key = `${now.idx}:${now.reveal}`;
+    if (key !== quizKey) {
+      quizKey = key;
+      const el = document.querySelector('[data-dyn="quiz"]');
+      if (el) DYN.quiz(el);
     }
-    render();
-  };
+    document.querySelectorAll('[data-qleft]').forEach((el) => { el.textContent = now.reveal ? '' : `${now.left}s`; });
+  }
 
-  const displayName = () => (S.you.role === 'physician' ? `Dr. ${S.you.name}` : S.you.name);
-  const mySide = () => ROLES[S.you.role].side;
-  const stepList = (items) => `<ol class="steps">${items.map((i) => `<li>${i}</li>`).join('')}</ol>`;
-  const bigTimer = (side) => `<div class="timerwrap ${side ? 'side' : ''}"><div class="bigtimer ${side ? 'side' : ''}" data-timer="big"></div><div class="timerlabel">${STEP_LABEL[S.step] || ''}</div></div>`;
-  const recall = () => `
-    <details class="recall"><summary>📦 Reference: packages, modules, costs, coverage</summary>
-      <h3>The four packages</h3><div data-dyn="packages"></div>
-      <h3>Module menu for Package D</h3><div data-dyn="menu"></div>
-      <h3>Price against the budget</h3><div data-dyn="costs"></div>
-      <h3>Which problems each package fixes</h3><div data-dyn="matrix"></div>
-    </details>`;
+  function quizCounts(q, side) {
+    const counts = S.quiz[q.id];
+    if (!side) return q.options.map((_, i) => counts.physician[i] + counts.nurse[i]);
+    return counts[side];
+  }
 
-  // ---------- facilitator procedure: what to say and do in every part ----------
-  const PROCEDURE = {
-    lobby: ['Share the address and the room code.', 'Wait for seats to fill, or press Randomize.', 'Press Begin when every group has someone.'],
-    p1_intro: ['Read the two tasks aloud.', 'Remind the room: no talking.', 'Press Start the simulation.'],
-    p1_ehr: ['Say nothing. Let the alerts build.', 'The system crashes at 54 seconds and the screen moves on by itself.'],
-    p2_notes: ['Read out the two alerts that were missed.', 'Everyone ticks problems alone, in silence.', 'Press Next at zero.'],
-    p2_merge: ['Ask the room: "What stopped you from doing your job?"', 'Each person stars 3 problems for their group.', 'Vendors listen and do not speak.'],
-    p2_top3: ['Ask what belongs in Must fix.', 'Drag cards between columns as the room decides.', 'Confirm the spokesperson, then press Next.'],
-    p3_hospital: ['Invite the spokesperson to present for two minutes.', 'Vendors stay silent and prepare.', 'Press Next to start the pitches.'],
-    p3_pitch: ['MedCore pitches A then B. Northwind pitches C then D. One minute each.', 'Call time when the pitch timer reaches zero.', 'Hold all questions for Phase 4.'],
-    p4_intra: ['Teams stay at their own tables.', 'Each person sets a position on their device.', 'Remind teams that they hold private facts.'],
-    p4_inter: ['Send people to other tables. Vendors visit everyone.', 'Watch the board: a deal needs 5 of 7 votes.', 'With two minutes left, ask the executives to announce the ballot.'],
-    p5_vote: ['Call each group for its vote and one reason.', 'Wait for the count to finish.', 'Press Next to reveal the result.'],
-    p6_decision: ['Ask the CEO to announce the decision to the vendors.', 'Ask the vendors: accept or refuse?', 'Press Next for the replay.'],
-    p6_sim: ['Players redo the same ten steps in the new system on their own devices.', 'Click through the steps on this screen for the room.', 'Use the System buttons to compare with what was not bought.'],
-    p6_outcome: ['Read the headline and the patient line.', 'Ask one group to read its outcome card.', 'Press Next for the feedback form.'],
-    p6_reflect: ['Give everyone one minute.', 'Download the feedback CSV before closing the game.'],
-    debrief: ['Take the four questions in order.', 'Ask which published fact changed the room.'],
-  };
-  function procedure() {
-    const steps = PROCEDURE[S.step];
-    if (!steps) return '';
-    return `<div class="proc"><span class="proc-tag">FACILITATOR</span><ol>${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`;
+  function answerBars(q, counts, highlight) {
+    const total = counts.reduce((a, b) => a + b, 0);
+    return `<div class="qbars">${q.options.map((o, i) => `
+      <div class="qbar ${highlight && q.correct === i ? 'right' : ''}">
+        <span>${esc(o)}</span><span class="qbar-track"><span style="width:${pct(counts[i], total)}%"></span></span><b>${counts[i]}</b>
+      </div>`).join('')}</div>`;
+  }
+
+  // ---------- Phase 5: choosing a package or a pair ----------
+
+  function choiceSummary(key) {
+    if (!key) return '<span class="muted">Pick one or two packages.</span>';
+    const cost = C.choiceCost(key);
+    const fixes = C.choiceFixes(key);
+    const over = cost > BUDGET ? ` — over budget: needs ${money(cost - BUDGET)} more or a phased contract` : '';
+    return `<b>${esc(choiceTitle(key))}</b> · <span class="${over ? 'red' : 'ok'}">${money(cost)}${over}</span> · fixes ${fixes.length}: ${fixes.join(', ')}`;
+  }
+
+  function picker(slot, current) {
+    const letters = C.choiceLetters(current);
+    return `
+      <div class="picker">
+        <div class="picker-btns">${PACKAGE_ORDER.map((l) => `
+          <button class="pkbtn pk-${l} ${letters.includes(l) ? 'on' : ''}" data-act="pick" data-slot="${slot}" data-pkg="${l}">
+            <span class="pkl">${l}</span><span>${PACKAGES[l].icon} ${esc(PACKAGES[l].name)}<small>${money(PACKAGES[l].cost)}</small></span>
+          </button>`).join('')}</div>
+        <div class="picker-sum">${choiceSummary(current)}</div>
+      </div>`;
+  }
+
+  function packageCard(l, opts) {
+    const pkg = PACKAGES[l];
+    const top = new Set(S.problems.top5);
+    const catchText = S.catchText[l];
+    const showCatch = !!catchText && (opts.catches || S.catches.includes(l));
+    return `
+      <div class="pkcard pk-${l}" data-pkg-card="${l}">
+        <div class="pkcard-head"><span class="pkl">${l}</span><span>${pkg.icon} ${esc(pkg.name)}</span><b>${money(pkg.cost)}</b></div>
+        <p class="small muted">${esc(pkg.tech)}</p>
+        <p>${esc(pkg.pitch)}</p>
+        <div class="covers">${pkg.fixes.map((id) => `<span class="pchip ${top.has(id) ? 'ok' : ''}" title="${esc(PROBLEM[id].label)}">${id} · ${esc(PROBLEM[id].label)}</span>`).join('')}</div>
+        <p class="small">${pkg.fixes.filter((id) => top.has(id)).length} of the hospital's top five</p>
+        ${showCatch ? `<div class="catch ${S.catches.includes(l) ? 'revealed' : ''}"><b>${S.catches.includes(l) ? 'CATCH (revealed)' : '🔒 CATCH: reveal only when asked'}</b> ${esc(catchText)}</div>` : ''}
+        ${(opts.host || opts.catches) && !S.catches.includes(l) && S.step !== 'p1_sim' ? `<button class="btn small" data-act="catch" data-pkg="${l}">Reveal catch</button>` : ''}
+      </div>`;
+  }
+
+  const topFiveList = () => `<ol class="topfive">${S.problems.top5.map((id) => `<li><b>${id} · ${esc(PROBLEM[id].label)}</b><small>${esc(PROBLEM[id].desc)}</small></li>`).join('')}</ol>`;
+
+  // ---------- Phase 6: the replay ----------
+
+  function finalChoice() {
+    return S.decision && S.decision.final;
+  }
+
+  function replayHtml(big) {
+    const key = finalChoice();
+    const letters = C.choiceLetters(key);
+    const moments = letters.map((l) => `<div class="moment pk-${l}"><span class="pkl">${l}</span><div><b>${esc(PACKAGES[l].name)}</b><p>${esc(PACKAGES[l].replay)}</p></div></div>`).join('');
+    const mine = !S.isHost && mySimSide() && S.you.sim ? myCalls() : '';
+    return `
+      <div class="replay ${big ? 'big' : ''}">
+        <div class="eyebrow">BED 14 · SEPTEMBER 29 · REPLAYED ON ${key ? esc(choiceShort(key)) : 'THE OLD SYSTEM'}</div>
+        ${key ? moments : '<p class="lead">No package was chosen. The afternoon replays exactly as before.</p>'}
+        ${key ? `<div class="happy"><div class="eyebrow">THE HAPPY ENDING</div><ul class="checks">${HAPPY_ENDING.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></div>` : ''}
+        ${mine}
+      </div>`;
+  }
+
+  // The player's own calls in the crash, against what happened in the replay.
+  function myCalls() {
+    const conf = SIM.SIDES[mySimSide()];
+    const made = S.you.sim.chart.decisions || {};
+    const rows = conf.decisions.filter((d) => !d.text).map((d) => {
+      const v = made[d.id];
+      const label = (id) => (d.options.find(([o]) => o === id) || [, id])[1];
+      const shown = d.multi ? (v || []).map(label).join(', ') : v ? label(v) : '';
+      const ok = d.multi ? v && d.best.every((b) => v.includes(b)) : v && d.best.includes(v);
+      return `<tr><td>${esc(d.q)}</td><td>${shown ? esc(shown) : '<span class="muted">not recorded</span>'}</td><td>${v ? (ok ? '✓' : '✗') : ''}</td></tr>`;
+    }).join('');
+    return `<details class="recall"><summary>Your ${mySimSide()} team's calls during the crash</summary><table class="calls">${rows}</table></details>`;
+  }
+
+  // ---------- the facilitator dashboard ----------
+
+  function dashboardHtml() {
+    const progress = ROLE_ORDER.map((r) => `<tr><td>${ROLES[r].icon} ${esc(ROLES[r].short)}</td><td>${S.roleCounts[r]}</td></tr>`).join('');
+    const sim = ['physician', 'nurse'].map((t) => {
+      const x = S.sim[t];
+      const found = Object.values(x.clues).reduce((a, b) => a + b, 0);
+      return `<tr><td>${t === 'physician' ? '🧑‍⚕️ Physician side' : '👩‍⚕️ Nurse side'}</td><td>${x.players} charting</td><td>${x.handled} alerts cleared (${x.overridden} by override)</td><td>${found} clue openings</td></tr>`;
+    }).join('');
+    const key = QUIZ.map((q) => `<tr><td>${esc(q.q)}</td><td>${esc(q.answer)}</td><td>${q.problems.join(', ')}</td></tr>`).join('');
+    const calls = ['physician', 'nurse'].map((t) => `<h3>${t === 'physician' ? 'Physician' : 'Nurse'} decisions</h3><ul>${SIM.SIDES[t].decisions.filter((d) => d.best).map((d) => `<li>${esc(d.q)}: <b>${d.best.map((b) => esc((d.options.find(([o]) => o === b) || [, b])[1])).join(' or ')}</b></li>`).join('')}</ul>`).join('');
+    const clues = SIM.CLUES.map((c) => `<li>${esc(c.label)} — <i>${esc(c.where)}</i></li>`).join('');
+    return `
+      <div class="dashboard">
+        <h2>📋 Facilitator dashboard</h2>
+        <h3>Team progress</h3>
+        <table class="combos"><tr><th>Role</th><th>Players</th></tr>${progress}</table>
+        <table class="combos"><tr><th>Simulation</th><th>Charting</th><th>Alerts</th><th>Clues</th></tr>${sim}</table>
+        <p>Quiz answers: ${S.counts.quiz} · rankings: ${S.counts.rank} · stars: ${S.counts.stars} · choices: ${S.counts.picks} · votes: ${S.counts.votes}</p>
+        <h3>Answer key</h3>
+        <table class="combos"><tr><th>Quiz question</th><th>Answer</th><th>Problems</th></tr>${key}</table>
+        ${calls}
+        <h3>Where the clues are</h3><ul>${clues}</ul>
+        <h3>Phase briefs (01–06)</h3>
+        ${briefs.phases.map((m) => `<div class="brief">${md(m)}</div>`).join('') || '<p class="muted">Loading…</p>'}
+        <h3>Stakeholder briefs (07–15)</h3>
+        ${ROLE_ORDER.map((r) => (briefs.briefs[r] ? `<div class="brief">${md(briefs.briefs[r])}</div>` : '')).join('')}
+      </div>`;
+  }
+
+  function openModal(html) {
+    document.querySelector('.modal')?.remove();
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.dataset.act = 'closemodal';
+    modal.innerHTML = `<div class="modal-box wide">${html}<button class="btn" data-act="closemodal">Close</button></div>`;
+    document.body.appendChild(modal);
   }
 
   // ---------- step screens ----------
 
   function stage() {
     const host = S.isHost;
-    const me = host ? null : ROLES[S.you.role];
-    const vendor = !host && S.you.group === 'vendor';
+    const role = host ? null : S.you.role;
     switch (S.step) {
       case 'lobby':
         if (host) {
@@ -1186,411 +1174,230 @@
         return `
           <div class="center narrow">
             <h1>Welcome, ${esc(displayName())}</h1>
-            ${coach()}
-            <div class="eyebrow">YOUR SEAT: ${me.name}</div>
-            ${roleCard(S.you.role)}
-            <p><button class="btn primary" data-act="howto">📖 How to play your seat, step by step</button></p>
-            <p class="muted">Your role card is one tap away at any time: press your name at the top right.</p>
+            <div class="eyebrow">${ROLES[role].icon} ${ROLES[role].name} · GROUP ${myGroup()}: ${esc(GROUPS[myGroup()].name.toUpperCase())}</div>
+            <p class="muted">Read your brief. Its private information is yours alone, and it is meant to drive the debate.</p>
+            ${briefHtml(role)}
             <p class="waiting">Waiting for the facilitator to begin<span class="dots"></span></p>
-            <button class="btn ghost" data-act="rerole">Change seat</button>
+            <button class="btn ghost" data-act="rerole">Change role</button>
           </div>`;
 
       case 'p1_intro':
         if (host) {
           const watchers = ROLE_ORDER.filter((r) => ROLES[r].observe);
           return `
-            <div class="center reveal">
-              ${bigTimer()}
-              <h1 class="huge">IT IS 13:02 ON 6 WEST.</h1>
-              <p class="lead">Mr. Whitfield's labs just posted. Do your job.</p>
+            <div class="center narrow reveal">
+              <h1 class="huge">BEFORE YOU FIX IT, USE IT.</h1>
+              <p class="lead">Four minutes inside Riverbend's EHR. Both teams open James Whitfield, bed 14, at 12:45 on September 29.</p>
               <div class="twocol">
-                <div class="taskcard"><div class="eyebrow">🧑‍⚕️ PHYSICIANS</div><p>${SIM.physician.brief}</p></div>
-                <div class="taskcard"><div class="eyebrow">👩‍⚕️ NURSES</div><p>${SIM.nurse.brief}</p></div>
+                <div class="taskcard"><div class="eyebrow">🧑‍⚕️ PHYSICIAN TEAM</div><p>Find out why he is getting worse. Six decisions.</p><p class="muted small">Shadowing: executives, finance, IT</p></div>
+                <div class="taskcard"><div class="eyebrow">👩‍⚕️ NURSE TEAM</div><p>Four patients, insulin due, a daughter on the phone. Five decisions.</p><p class="muted small">Shadowing: clinical leaders, compliance, advocates</p></div>
               </div>
-              <div class="watchgrid">${watchers.map((r) => `<div class="watch"><b>${ROLES[r].icon} ${ROLES[r].plural}</b><span>watch the ${ROLES[r].side} screen</span><p>${esc(ROLES[r].observe)}</p></div>`).join('')}</div>
-              <p class="muted">No talking. One minute, ten steps. The alerts start almost at once.</p>
+              <p class="muted">Separate rooms. They cannot hear each other. The crash is the point. Vendors prepare their pitch.</p>
             </div>`;
         }
-        return `
-          <div class="center narrow reveal">
-            ${bigTimer(true)}
-            <h1 class="huge">BEFORE YOU FIX IT, USE IT.</h1>
-            ${coach()}
-            <div class="taskcard"><div class="eyebrow">${S.you.role === mySide() ? 'YOUR TASK' : `THE ${mySide().toUpperCase()}'S TASK`}</div><p class="lead">${SIM[mySide()].brief}</p></div>
-            <p class="muted">One minute. Ten steps. No talking.</p>
-          </div>`;
-
-      case 'p1_ehr':
-        if (!host) return simScreen(mySide(), false);
+        if (!mySimSide()) return `<div class="center narrow"><h1>You are the vendor.</h1><p class="lead">While the clinicians work bed 14, prepare your pitch. The hospital will call you in.</p>${briefHtml(role)}</div>`;
         return `
           <div class="center narrow">
-            <div class="eyebrow">PATIENT: JAMES WHITFIELD, 61 · LIVER TRANSPLANT, DAY 6</div>
-            ${bigTimer()}
-            <div data-dyn="ehrhost"></div>
+            ${S.you.role === mySimSide()
+              ? briefHtml(role)
+              : `<div class="taskcard"><div class="eyebrow">YOU ARE SHADOWING THE ${mySimSide().toUpperCase()} TEAM</div><p class="lead">For four minutes you see exactly the chart, alerts and pages the ${mySimSide()} team sees. Log what gets in their way.</p><p>Patient: James Whitfield, 61, bed 14, day 6 after a liver transplant. It is 12:45 on September 29.</p></div>${briefHtml(role)}`}
           </div>`;
 
-      case 'p2_notes':
-        // The projector shows both screens' missed alert side by side with the hospital's live problem log.
-        if (host) {
-          return `
-            <div class="center wide">
-              <div class="timeline"><h1 class="huge">SYSTEM DOWN.</h1>${bigTimer()}</div>
-              <div class="split">
-                <div>
-                  ${missedBanner('physician')}${missedBanner('nurse')}
-                  <div data-dyn="ehrstats"></div>
-                </div>
-                <div>
-                  <h2>On your own: what stopped you from doing your job?</h2>
-                  <div data-dyn="count:reports"></div>
-                  <div class="compactbars" data-dyn="reportbars"></div>
-                </div>
-              </div>
-            </div>`;
-        }
+      case 'p1_sim':
+        if (!host && mySimSide()) return simChart();
         return `
           <div class="center narrow">
-            ${bigTimer(true)}
-            <h1 class="huge">SYSTEM DOWN.</h1>
-            ${missedBanner(mySide())}
-            <div data-dyn="ehrstats"></div>
-            ${stepMap(mySide(), (S.you.ehr && S.you.ehr.steps) || 0)}
-            ${coach()}
-            <h2>What stopped ${S.you.group === 'clinical' ? 'you' : 'them'} from doing the job?</h2>
-            <div data-dyn="report"></div>
-            <label class="field">Anything not on the list?
-              <input data-other maxlength="200" value="${esc(S.you.report.other)}" placeholder="Optional">
-            </label>
+            <div class="eyebrow">BED 14 · JAMES WHITFIELD, 61 · DAY 6 AFTER LIVER TRANSPLANT</div>
+            <p class="wf-hostclock">Ward clock <b data-simclock></b></p>
+            <div class="bigtimer" data-timer="big"></div>
+            <h1>${host ? 'The clinicians are charting.' : 'The clinicians are in bed 14.'}</h1>
+            <p class="lead">${host ? 'Alerts speed up. At 13:02 the labs fire. At 13:03 the EHR goes down.' : 'Use the time to plan your pitch.'}</p>
+            <div data-dyn="simhost"></div>
+            ${host ? '' : `<div class="pkcards">${PACKAGE_ORDER.map((l) => packageCard(l, { catches: true })).join('')}</div>`}
           </div>`;
 
-      case 'p2_merge':
-        if (host) {
-          return `
-            <div class="center wide">
-              ${bigTimer()}
-              <h1>What stopped you from doing your job?</h1>
-              <p class="lead">One hospital, one list. Each person stars the <b>${TOP_PICKS} problems</b> that matter most to their group. Vendors listen and may not speak.</p>
-              <div data-dyn="count:top"></div>
-              <div data-dyn="board"></div>
-            </div>`;
-        }
+      case 'p2_quiz':
         return `
           <div class="center narrow">
-            ${bigTimer(true)}
-            <h1>ONE HOSPITAL, ONE LIST</h1>
-            ${coach()}
-            ${vendor ? '<div data-dyn="sellmap"></div>' : '<div data-dyn="intra"></div>'}
+            <h1>Did you spot it?</h1>
+            <div data-dyn="quiz"></div>
           </div>`;
 
-      case 'p2_top3':
-        return `
-          <div class="center ${host ? 'wide' : ''}">
-            ${bigTimer(!host)}
-            <h1>Which problems must be fixed?</h1>
-            ${host ? '<p class="lead">Decide together what must be fixed, and choose a spokesperson. The facilitator and team representatives can move cards.</p>' : coach()}
-            <div data-dyn="spokes"></div>
-            <div data-dyn="board"></div>
-            ${host ? '<div data-dyn="others"></div><div data-dyn="shared"></div>' : ''}
-          </div>`;
-
-      case 'p3_hospital':
-        return `
-          <div class="center narrow reveal">
-            ${bigTimer(!host)}
-            <h1 class="huge">🤝 "HERE IS OUR PROBLEM."</h1>
-            ${host ? '<p class="lead">The hospital\'s spokesperson has two minutes to present the list to the vendors.</p>' : coach()}
-            <div data-dyn="spokes"></div>
-            <div data-dyn="critical"></div>
-            ${vendor ? `<h2>Your two pitch cards</h2>${PACKAGE_ORDER.filter((id) => SELLERS[PACKAGES[id].seller] === S.you.role).map(pitchCue).join('')}<p class="muted">${esc(ROLES[S.you.role === 'medcore' ? 'northwind' : 'medcore'].plural)} pitches the other two. You are competing for the same contract.</p>` : ''}
-          </div>`;
-
-      case 'p3_pitch':
-        return `
-          <div class="center ${host ? 'wide' : ''}">
-            ${bigTimer(!host)}
-            <h1>"WHAT CAN YOU SELL US?"</h1>
-            <div data-dyn="pitchnow"></div>
-            ${host ? '' : coach()}
-            ${vendor ? '<div data-dyn="pitchcue"></div>' : ''}
-            <div data-dyn="pitchpackages"></div>
-            <h2>Module menu for Package D</h2>
-            <div data-dyn="menu"></div>
-            <p class="muted">A fifth option always exists: sign nothing and keep the current EHR.</p>
-          </div>`;
-
-      case 'p4_intra':
-        if (host) {
-          return `
-            <div class="center wide">
-              ${bigTimer()}
-              <h1>${money(CAP)} budget. Four packages. ${PASS} votes needed.</h1>
-              ${stepList([
-                'Stay <b>inside your own team</b> for these eight minutes.',
-                'Read your private brief. Agree your <b>must-haves</b>, what you can <b>trade</b>, and your <b>red line</b>.',
-                'Each person sets a position on their own device. It can change later.',
-              ])}
-              <div data-dyn="count:straw"></div>
-              <div class="split"><div><div class="eyebrow">PRICE AGAINST THE BUDGET</div><div data-dyn="costs"></div></div><div><div class="eyebrow">MODULE MENU · PACKAGE D</div><div data-dyn="menu"></div></div></div>
-              <div data-dyn="shared"></div>
-            </div>`;
-        }
-        return `
-          <div class="center narrow">
-            ${bigTimer(true)}
-            <h1>TEAM HUDDLE: ${GROUPS[me.group].short.toUpperCase()}</h1>
-            ${coach()}
-            <div data-dyn="stretchcue"></div>
-            <div data-dyn="secrets"></div>
-            ${packageLines(S.you.role)}
-            ${vendor ? '' : '<h2>Your position</h2><p class="muted">A straw vote. Your team sees how your team is leaning.</p><div data-dyn="ballot:straw"></div>'}
-            <details class="recall"><summary>🪪 Your role card</summary>${roleCard(S.you.role)}</details>
-            ${recall()}
-          </div>`;
-
-      case 'p4_inter':
-        return `
-          <div class="center ${host ? 'wide' : 'narrow'}">
-            ${bigTimer(!host)}
-            <h1>NEGOTIATE</h1>
-            <div class="checkpoint" data-checkpoint></div>
-            ${host ? `<p class="lead">Send people to other tables. Vendors may visit any table. A deal is a package, modules, a go-live month, and contract terms.</p>` : coach()}
-            ${host ? '' : '<div data-dyn="stretchcue"></div>'}
-            <div data-dyn="strawboard"></div>
-            <div data-dyn="shared"></div>
-            ${host ? '<div class="split"><div><div class="eyebrow">PRICE AGAINST THE BUDGET</div><div data-dyn="costs"></div></div><div><div class="eyebrow">MODULE MENU · PACKAGE D</div><div data-dyn="menu"></div></div></div>' : `
-              <div data-dyn="secrets"></div>
-              ${vendor ? '' : '<h2>Your position</h2><p class="muted">Update it as the negotiation moves.</p><div data-dyn="ballot:straw"></div>'}
-              <details class="recall"><summary>🪪 Your role card</summary>${roleCard(S.you.role)}${packageLines(S.you.role)}</details>
-              ${recall()}`}
-          </div>`;
-
-      case 'p5_vote':
-        return `
-          <div class="center narrow">
-            ${bigTimer(!host)}
-            <h1>VOTE.</h1>
-            ${host
-              ? `<p class="lead">Each group has 30 seconds to state its vote and one reason. Results are sealed until the decision.</p>
-                 <div data-dyn="count:final"></div>
-                 ${stepList([
-                   `A deal passes with <b>${PASS} of ${TOTAL_VOTES} votes</b>. Executives hold 2.`,
-                   'Each group votes as a block: the package most of its members choose.',
-                   'A module or term is adopted when groups holding a majority of votes want it.',
-                   `Modules are bought in order of support <b>until the ${money(CAP)} budget runs out</b>.`,
-                   'If nothing reaches the bar, the executives decide and must explain why.',
-                 ])}`
-              : vendor
-                ? `${coach()}<p class="lead">The hospital is voting. You will hear the decision from the CEO.</p><div data-dyn="shared"></div>`
-                : `${coach()}<div data-dyn="ballot:final"></div>`}
-          </div>`;
-
-      case 'p6_decision': {
-        const d = S.decision;
-        const pkg = PACKAGES[d.pkg];
-        const t = d.tally;
-        return `
-          <div class="center narrow reveal">
-            ${bigTimer(!host)}
-            ${host ? '' : coach()}
-            <div class="eyebrow">THE HOSPITAL HAS DECIDED</div>
-            <div class="winner p${d.pkg}">
-              <div class="winner-icon">${pkg.icon}</div>
-              <h1>${esc(pkgTitle(d.pkg))}</h1>
-              <p>${esc(pkg.tagline)}</p>
-            </div>
-            <p class="lead">${d.empty ? 'Nobody voted.' : d.passed ? `Passed with <b>${d.votes} of ${t.present} votes</b>.` : d.byExec ? `No deal reached ${t.need} votes. <b>The executives decided</b>, and must explain why.` : `No deal reached ${t.need} votes.`}</p>
-            ${d.pkg === 'd' ? `
-              <div class="eyebrow">MODULES BOUGHT</div>
-              ${d.modules.length ? `<ul class="terms">${d.modules.map((id) => `<li>${MODULE[id].icon} ${esc(MODULE[id].label)} · ${d.terms.includes('reference') && id === 'governance' ? 'free' : money(MODULE[id].price)}</li>`).join('')}</ul>` : '<p class="muted">None. No module had majority support.</p>'}
-              ${d.dropped.length ? `<p class="dropped">Wanted, but the money ran out: ${d.dropped.map((id) => esc(MODULE[id].label)).join(' · ')}</p>` : ''}` : ''}
-            <div>
-              <div class="eyebrow">CONTRACT TERMS</div>
-              ${d.terms.length ? `<ul class="terms">${d.terms.map((id) => `<li>${esc(TERM[id].label)}</li>`).join('')}</ul>` : '<p class="muted">No terms had majority support.</p>'}
-              ${d.droppedTerms && d.droppedTerms.length ? `<p class="dropped">Wanted, but over budget without finance's signature: ${d.droppedTerms.map((id) => esc(TERM[id].label)).join(' · ')}</p>` : ''}
-            </div>
-            ${dealBox(d)}
-            <p class="lead">🤝 CEO: announce the decision to the vendor. ${d.pkg === 'keep' ? '' : 'Vendors: accept, or refuse.'}</p>
-            <div data-dyn="finalboard"></div>
-          </div>`;
-      }
-
-      case 'p6_sim': {
-        if (!host) return simScreen(mySide(), true);
-        return `
-          <div class="center wide">
-            <div class="timeline"><h1>ONE YEAR LATER, 13:02 ON 6 WEST</h1>${bigTimer()}</div>
-            <p class="muted">Everyone is redoing the same ten steps in the new system on their own device. This is the same screen, for the room.</p>
-            <div data-dyn="simswitch"></div>
-            <div data-dyn="hostsim"></div>
-          </div>`;
-      }
-
-      case 'p6_outcome': {
-        const d = S.decision;
-        const pkg = PACKAGES[d.pkg];
-        const roles = host ? ROLE_ORDER : [S.you.role, ...ROLE_ORDER.filter((r) => r !== S.you.role)];
-        const cov = coverage(d);
-        const extra = d.pkg === 'd'
-          ? [d.modules.includes('portal') ? MODULE.portal.bought : MODULE.portal.not, d.terms.includes('bridge') ? TERM.bridge.effect : TERM.bridge.missing]
-          : [];
-        const shock = surprises(d);
-        return `
-          <div class="center reveal">
-            ${bigTimer(!host)}
-            ${host ? '' : coach()}
-            <div class="eyebrow">ONE YEAR LATER · ${esc(pkgTitle(d.pkg))}</div>
-            <h1 class="huge">${esc(pkg.headline)}</h1>
-            <div class="maria"><b>Mr. Whitfield, 13:02:</b> ${esc(pkg.whitfield)} ${extra.map(esc).join(' ')}</div>
-            <div class="stats">
-              <div class="stat"><b>347 → ${pkg.alertsAfter}</b><span>alerts in three minutes</span></div>
-              <div class="stat"><b>${cov.full.size} of 15</b><span>problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}</span></div>
-            </div>
-            <ul class="cardlist">${pkg.cards.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
-            <div class="scores">${scorecard(d)}</div>
-            ${dealBox(d)}
-            ${shock.length ? `<div class="shock"><div class="eyebrow bad">WHAT ARRIVED AFTER SIGNING</div>${shock.map((x) => `<p>－ ${esc(x)}</p>`).join('')}</div>` : ''}
-            <div class="outcards ${host ? '' : 'mine-first'}">${roles.map((r) => roleOutcome(r, d)).join('')}</div>
-          </div>`;
-      }
-
-      case 'p6_reflect':
-        if (host) {
+      case 'p2_rank':
+        if (!host && ['physician', 'nurse'].includes(role)) {
           return `
             <div class="center narrow">
-              ${bigTimer()}
-              <h1>FEEDBACK FORM</h1>
-              <p class="lead">Six short questions on your own device.</p>
-              <div data-dyn="count:reflections"></div>
-              <div data-dyn="reflections"></div>
+              <h1>Your team's top five</h1>
+              <p class="lead">Tap the five EHR problems that hurt bed 14 most, in order. Your team's list merges with the other team's.</p>
+              <div class="bigtimer side" data-timer></div>
+              <div data-dyn="rank"></div>
             </div>`;
         }
-        return reflectForm();
-
-      case 'debrief':
         return `
-          <div class="center narrow reveal">
-            <div class="eyebrow">DEBRIEF</div>
-            ${host ? '' : coach()}
-            <h1>Everyone agreed the EHR was broken.</h1>
-            <h1 class="accent">So why was fixing it so hard?</h1>
-            ${stepList([
-              'Why did the hospital reach this decision?',
-              'What did each group give up, and who gave up the most?',
-              'Which private fact changed the room when it was published? Which stayed hidden?',
-              'What would have had to be true for all seven votes to say yes?',
-            ])}
-            <div data-dyn="finalboard"></div>
-            <div data-dyn="shared"></div>
-            ${host ? '<div data-dyn="count:reflections"></div>' : reflectForm(true)}
+          <div class="center wide">
+            <h1>The physician and nurse teams rank their top five</h1>
+            <div class="bigtimer side" data-timer></div>
+            <div data-dyn="teamtops"></div>
           </div>`;
 
-      case 'reveal_cards': {
-        const cards = [
-          ['🧠', 'BEHAVIORAL ARCHITECTURE', 'People prefer familiar systems and perceive action differently from inaction.', 'Every package had a flaw you could see. The current EHR\'s flaws were familiar, so "no deal" stayed on the ballot.'],
-          ['💰', 'FINANCIAL ARCHITECTURE', 'The organization paying for an innovation may not capture its benefits.', 'Finance could count the $45M cap to the dollar. Nobody could put a number on a potassium caught in time.'],
-          ['🩺', 'PROFESSIONAL ARCHITECTURE', 'Changing technology changes people\'s jobs, responsibilities and authority.', 'Physicians wanted the scribe. Nurses wanted single entry. They shared one vote.'],
-          ['🕸️', 'NETWORK ARCHITECTURE', 'Health care changes require many interconnected people and systems to cooperate.', 'No group could pass a deal alone: 43 interfaces, seven groups, five votes.'],
-          ['⚖️', 'ETHICAL / LEARNING ARCHITECTURE', 'Health systems need evidence that changes work, and gathering that evidence creates its own barriers.', 'No AI without governance. Governance cost $3M that could have bought something clinicians asked for.'],
-        ];
+      case 'p3_discuss':
+        if (host) {
+          return `
+            <div class="center wide">
+              <h1>Stakeholder discussion</h1>
+              ${substepsHtml()}<p class="muted">Chaired by the CEO.</p>
+              <div class="split">
+                <div><div class="eyebrow">HOSPITAL PROBLEM LIST (MERGED) — CLICK TO MOVE IN OR OUT OF THE TOP FIVE</div><div data-dyn="merged"></div></div>
+                <div>
+                  <div class="eyebrow">AGREED TOP FIVE</div><div data-dyn="top5"></div>
+                  <div class="taskcard"><div class="eyebrow">PROMPTS</div><ul>
+                    <li>Was this a people failure or a system failure?</li>
+                    <li>Which problem, if fixed, would have caught the tacrolimus level first?</li>
+                    <li>What does each group lose if nothing changes?</li></ul></div>
+                </div>
+              </div>
+            </div>`;
+        }
+        if (myGroup() === 5) return `<div class="center narrow"><h1>Wait outside.</h1><p class="lead">The hospital is deciding which five problems to put to you. The CEO will call you in.</p>${briefHtml(role)}</div>`;
         return `
-          <div class="center">
-            ${S.isHost ? '' : coach()}
-            <h1 class="huge">🎓 WHAT JUST HAPPENED?</h1>
-            <div class="archs">
-              ${cards
-                .map(
-                  ([icon, title, text, you], i) => `
-                <div class="arch" style="animation-delay:${0.5 + i * 0.9}s">
-                  <div class="arch-icon">${icon}</div>
-                  <div class="arch-title">${title}</div>
-                  <p>${text}</p>
-                  <p class="arch-you">${you}</p>
-                </div>`
-                )
-                .join('')}
+          <div class="center wide">
+            <h1>Stakeholder discussion</h1>
+            ${substepsHtml()}
+            <p class="muted">${role === 'clinical' ? 'You open: present the merged problem list and the near miss in 3 minutes.' : role === 'exec' ? 'You chair. Decide: people failure or system failure? Then call in the vendor.' : 'Respond from your own brief. Use your private information.'}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div class="split">
+              <div><div class="eyebrow">STAR THE FIVE THAT MATTER MOST TO YOU</div><div data-dyn="stars"></div></div>
+              <div><div class="eyebrow">AGREED TOP FIVE SO FAR</div><div data-dyn="top5"></div>${myBriefs(true)}</div>
+            </div>
+          </div>`;
+
+      case 'p4_handshake':
+        return `
+          <div class="center narrow reveal">
+            <div class="handshake">🤝</div>
+            <h1 class="huge">THE CEO CALLS IN THE VENDOR.</h1>
+            <p class="lead">${host ? 'The CEO shakes hands with the vendor and reads out the top five.' : role === 'exec' ? '<b>Your move:</b> shake hands with the vendor and read these five aloud.' : role === 'vendor' ? '<b>Your move:</b> shake hands with the CEO and listen.' : 'The CEO reads the top five to the vendor.'}</p>
+            <div data-dyn="top5"></div>
+          </div>`;
+
+      case 'p4_pitch':
+        return `
+          <div class="center wide">
+            <h1>Pitch fest</h1>
+            <p class="muted">${host ? 'One minute per package. Then one lightning question per group. Reveal a catch only when a question reaches it.' : role === 'vendor' ? 'Pitch each package in 1 minute: technology, cost, problems fixed. Disclose a catch only when a question reaches it.' : 'One lightning question per group, at most. Green chips are in the hospital\'s top five.'}</p>
+            <p class="pitchnow">Now pitching: <b data-pitchnow></b> · 1 min per package, then lightning questions</p>
+            <div class="bigtimer side" data-timer></div>
+            ${!host && role !== 'vendor' && briefSection(role, 'Ask the vendor') ? `<details class="recall" open><summary>Questions from your brief</summary>${md(briefSection(role, 'Ask the vendor'))}</details>` : ''}
+            <div data-dyn="pkcards"></div>
+            <div data-dyn="lightning"></div>
+          </div>`;
+
+      case 'p5_framing':
+        return `
+          <div class="center wide">
+            <h1>Finance framing</h1>
+            <p class="lead">${!host && role === 'finance' ? '<b>You present this</b> in 2 minutes, then chair the debate.' : 'The CFO frames the budget.'}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div class="split">
+              <div>
+                <div class="capbox"><small>APPROVED CAPITAL</small><b>${money(BUDGET)}</b><span>The cap is firm. Above it needs board approval or a phased contract.</span></div>
+                <div class="eyebrow">FINANCE'S ASKS BEFORE SUPPORTING ANY PACKAGE</div>
+                <ol>${FINANCE_ASKS.map((a) => `<li>${esc(a)}</li>`).join('')}</ol>
+              </div>
+              <div>
+                <div class="eyebrow">COMBINATIONS WITHIN BUDGET</div>
+                <table class="combos"><tr><th>Choice</th><th>Cost</th><th>Problems fixed</th><th>Count</th></tr>
+                  ${COMBOS.map((k) => `<tr><td><b>${esc(choiceShort(k))}</b></td><td>${money(C.choiceCost(k))}</td><td>${C.choiceFixes(k).join(', ')}</td><td>${C.choiceFixes(k).length}</td></tr>`).join('')}
+                </table>
+                <p class="small">C + D covers the most clinical risk but costs ${money(C.choiceCost('C+D'))}. Finance must find $3M or phase the work. No package fixes problem 13.</p>
+              </div>
+            </div>
+            <div data-dyn="vendorqa"></div>
+          </div>`;
+      }
+
+      case 'p5_intra':
+      case 'p5_inter': {
+        const inter = S.step === 'p5_inter';
+        if (host) {
+          return `
+            <div class="center wide">
+              <h1>${inter ? 'All-team discussion' : 'Team discussion'}</h1>
+              <p class="muted">${inter ? 'Groups argue, trade and form coalitions. The vendor answers questions on request.' : 'Each group agrees its first and second choice.'}</p>
+              <div class="bigtimer side" data-timer></div>
+              <div data-dyn="groupboard"></div>
+              <div data-dyn="vendorqa"></div>
+              ${inter ? '<div class="taskcard"><div class="eyebrow">DEBATE PROMPTS</div><ul><li>Who is responsible when the AI is wrong?</li><li>Is it better to fix the most problems, or the problems that nearly harmed bed 14?</li><li>What is the cost of a safety miss compared with the cost of a package?</li></ul></div>' : ''}
+            </div>`;
+        }
+        if (!isVoter()) {
+          return `<div class="center wide"><h1>Answer their questions.</h1><p class="lead">Groups may call you over. You may offer milestone payments or a phased start if finance pushes.</p><div class="bigtimer side" data-timer></div><div data-dyn="vendorqa"></div>${inter ? '<div data-dyn="groupboard"></div>' : ''}<div data-dyn="pkcards"></div></div>`;
+        }
+        return `
+          <div class="center wide">
+            <h1>${inter ? 'All-team discussion' : 'Agree your first and second choice'}</h1>
+            <p class="muted">${inter ? 'Argue, trade, form coalitions. You can still change your choices.' : `Talk it through with your group: ${esc(GROUPS[myGroup()].name)}.`}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div class="split">
+              <div><div class="eyebrow">YOUR FIRST CHOICE</div><div data-dyn="pick:first"></div><div class="eyebrow">YOUR SECOND CHOICE</div><div data-dyn="pick:second"></div></div>
+              <div>${inter ? '<div class="eyebrow">WHERE EVERY GROUP STANDS</div><div data-dyn="groupboard"></div>' : '<div class="eyebrow">YOUR GROUP SO FAR</div><div data-dyn="myteam"></div>'}
+                <div data-dyn="vendorqa"></div>
+                <details class="recall"><summary>Your brief</summary>${myBriefs(true)}</details></div>
             </div>
           </div>`;
       }
 
-      case 'reveal_point':
+      case 'p5_vote':
+        if (!host && isVoter()) {
+          return `
+            <div class="center narrow">
+              <h1>Vote</h1>
+              <p class="lead">One vote per group: your group casts the choice most of its members vote for. Your spokesperson breaks ties.</p>
+              <div class="bigtimer side" data-timer></div>
+              <div data-dyn="pick:vote"></div>
+              <div data-dyn="voteprogress"></div>
+            </div>`;
+        }
         return `
-          <div class="center narrow reveal point">
-            ${S.isHost ? '' : coach()}
-            <div class="eyebrow">THE POINT</div>
-            <h1>A better technology does not automatically create a better health-care system.</h1>
-            <p class="lead">Successful innovation has to work with:</p>
-            <p class="formula">people + incentives + workflows + institutions + evidence</p>
-            <p class="lead">The EHR solved enormous problems with medical information.</p>
-            <p class="lead">It also created new ones: documentation burden, note bloat, and alert fatigue.</p>
-            <p class="lead"><b>The system you just bought will solve some of those.</b></p>
-            <h1 class="accent question">What new problems might it create?</h1>
+          <div class="center narrow">
+            <h1>The hospital votes</h1>
+            <p class="lead">${host ? 'Groups 1, 2, 3, 4, 6 and 7 cast one vote each. Results are sealed.' : 'Stay silent during voting. You will receive the decision from the CEO.'}</p>
+            <div class="bigtimer side" data-timer></div>
+            <div data-dyn="voteprogress"></div>
           </div>`;
 
+      case 'p5_decision':
+        return `
+          <div class="center wide">
+            <h1>The decision</h1>
+            <div class="bigtimer side" data-timer></div>
+            <div data-dyn="decision"></div>
+          </div>`;
+
+      case 'p6_replay':
+        return `
+          <div class="center wide">
+            <h1>${host ? 'Bed 14, replayed' : ['physician', 'nurse'].includes(role) ? 'Replay the case on the new system' : 'Watch bed 14 replay'}</h1>
+            <div data-dyn="replay"></div>
+          </div>`;
+
+      case 'p6_wrap':
+        return `
+          <div class="center wide reveal">
+            <h1 class="huge">Next cycle, we call the vendor again.</h1>
+            <div data-dyn="wrap"></div>
+          </div>`;
       default:
         return '';
     }
-  }
-
-  // ---------- feedback form (the six questions from the facilitator pack) ----------
-
-  const reflectDraft = { worst: null, fixed: null, surprised: '', gaveup: '', learned: '' };
-  let reflectTimer = null;
-
-  function reflectForm(compact) {
-    Object.assign(reflectDraft, S.you.reflection || {});
-    const area = (key, label) => `
-      <label class="field">${label}
-        <textarea data-reflect="${key}" rows="2" maxlength="600">${esc(reflectDraft[key])}</textarea>
-      </label>`;
-    return `
-      <div class="${compact ? 'reflect compact' : 'center narrow reflect'}">
-        ${compact ? '<h2>Your feedback</h2>' : `${bigTimer(true)}<h1>FEEDBACK FORM</h1>${coach()}`}
-        <p class="lead">1. You played: <b>${esc(GROUPS[S.you.group].name)}</b></p>
-        <label class="field">2. Which EHR problem felt worst during the simulation?
-          <select data-reflect="worst">
-            <option value="">Choose one</option>
-            ${PROBLEMS.map((p) => `<option value="${p.id}" ${reflectDraft.worst === p.id ? 'selected' : ''}>${p.n}. ${esc(p.label)}</option>`).join('')}
-          </select>
-        </label>
-        <div class="field">3. Did the final deal fix the problem you cared about most?
-          <div data-dyn="fixedpick"></div>
-        </div>
-        ${area('surprised', '4. Which group surprised you most, and why?')}
-        ${area('gaveup', '5. What did you give up in the negotiation?')}
-        ${area('learned', '6. One thing you now understand about why hospital software is hard to change:')}
-        <p class="muted small" id="reflect-saved">Your answers save as you type.</p>
-      </div>`;
-  }
-
-  function saveReflection(delay) {
-    clearTimeout(reflectTimer);
-    reflectTimer = setTimeout(async () => {
-      const res = await act('reflect', reflectDraft);
-      const note = document.getElementById('reflect-saved');
-      if (res && note) note.textContent = 'Saved ✓';
-    }, delay);
-  }
-
-  function exportCsv() {
-    const cell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    const rows = [['group', 'seat', 'worst_problem', 'deal_fixed_it', 'group_that_surprised_me', 'what_i_gave_up', 'what_i_now_understand']];
-    for (const r of S.reflections) rows.push([GROUPS[ROLES[r.role].group].name, ROLES[r.role].short, r.worst ? PROBLEM[r.worst].label : '', r.fixed, r.surprised, r.gaveup, r.learned]);
-    const blob = new Blob(['\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `fix-the-hospital-feedback-${S.code}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
   }
 
   // ---------- chrome ----------
 
   function topbar() {
     const ph = S.phase;
-    const pill = ph >= 1 && ph <= 6 ? `PHASE ${ph}/6` : ph === 7 ? 'DEBRIEF' : 'LOBBY';
-    const dots = [1, 2, 3, 4, 5, 6]
-      .map((i) => `<i class="${i < ph ? 'done' : i === ph ? 'now' : ''}"></i>`)
-      .join('');
+    const pill = ph >= 1 && ph <= 6 ? `PHASE ${ph}/6` : 'LOBBY';
+    const dots = [1, 2, 3, 4, 5, 6].map((i) => `<i class="${i < ph ? 'done' : i === ph ? 'now' : ''}"></i>`).join('');
     const right = S.isHost
       ? `<span class="chip">ROOM <b>${esc(S.code)}</b></span>`
       : S.you.role
@@ -1598,13 +1405,14 @@
         : `<span class="chip">${esc(S.you.name)}</span>`;
     return `
       <header class="topbar">
-        <div class="brand">🏥 <span>FIX THE HOSPITAL</span></div>
+        <div class="brand">🏥 <span>BED 14</span><small class="fictional">Fictional teaching case, not for clinical use</small></div>
         <div class="progress">
           <span class="pill">${pill}</span>
-          <span class="roundname">${PHASE_TITLES[ph] || ''}${STEP_LABEL[S.step] ? ` · ${STEP_LABEL[S.step].toUpperCase()}` : ''}</span>
+          <span class="roundname">${PHASE_TITLES[ph] || ''}${STEP_TITLES[S.step] ? ` · ${STEP_TITLES[S.step].toUpperCase()}` : ''}</span>
           <span class="dotrow">${dots}</span>
         </div>
         <div class="topright">
+          <span class="session" data-session></span>
           <span class="timer hidden" data-timer></span>
           <button class="chip howbtn" data-act="howto" title="How to play">📖 <span>How to play</span></button>
           ${right}
@@ -1615,17 +1423,17 @@
 
   function hostbar() {
     const lobby = S.step === 'lobby';
-    const last = S.step === 'reveal_point';
-    const timed = S.timerTotal && S.step !== 'p1_ehr';
-    const nextLabel = lobby ? 'BEGIN ▶' : S.step === 'p1_intro' ? 'START THE SIMULATION ▶' : 'NEXT ▶';
+    const last = S.step === 'p6_wrap';
+    const timed = S.timerTotal && !S.fixed;
+    const nextLabel = lobby ? 'BEGIN' : S.step === 'p1_intro' ? 'START THE SIMULATION ▶' : 'NEXT ▶';
     return `
       <footer class="hostbar">
         ${lobby ? '<button class="btn ghost" data-act="leave">Close room</button>' : '<button class="btn" data-act="back">◀ BACK</button>'}
         <span class="hostbar-info" data-dyn="pcount"></span>
+        <button class="btn" data-act="dashboard">📋 DASHBOARD</button>
+        ${S.timerTotal ? (S.paused ? '<button class="btn primary" data-act="resume">▶ RESUME</button>' : '<button class="btn" data-act="pause">⏸ PAUSE</button>') : ''}
         ${timed ? '<button class="btn" data-act="timer-add">+1 MIN</button><button class="btn" data-act="timer-restart">RESTART TIMER</button>' : ''}
-        ${S.phase >= 6 && S.step !== 'p6_decision' && S.step !== 'p6_sim' ? '<button class="btn" data-act="export">⬇ FEEDBACK (CSV)</button>' : ''}
         <span class="spacer"></span>
-        ${!lobby && S.phase < 7 ? '<button class="btn danger" data-act="end">SKIP TO DEBRIEF</button>' : ''}
         ${last ? '' : `<button class="btn primary" data-act="next">${nextLabel}</button>`}
       </footer>`;
   }
@@ -1633,615 +1441,261 @@
   // ---------- live regions ----------
 
   function setHtml(el, html) {
-    if (el._html !== html) {
-      el.innerHTML = iconize(html);
-      el._html = html;
-    }
+    if (el._html === html) return;
+    // Keep whatever the player is typing (fields with a name) when the region redraws.
+    const typed = Object.fromEntries([...el.querySelectorAll('[name]')].map((i) => [i.name, i.value]));
+    const focused = el.contains(document.activeElement) && document.activeElement.name;
+    el.innerHTML = html;
+    el._html = html;
+    for (const i of el.querySelectorAll('[name]')) if (typed[i.name]) i.value = typed[i.name];
+    if (focused) el.querySelector(`[name="${focused}"]`)?.focus();
   }
 
-  // Horizontal bars that are built once, so widths animate as numbers change.
-  function bars(el, rows, total, unit) {
-    const sig = rows.map((r) => r.k).join(',');
-    if (el._sig !== sig) {
-      el._html = null;
-      el.classList.add('bars');
-      el.innerHTML =
-        rows
-          .map(
-            (r) => `
-          <div class="bar-row" data-opt="${r.k}">
-            <div class="bar-label">${r.label}</div>
-            <div class="bar-track"><div class="bar-fill ${r.cls || ''}"></div></div>
-            <div class="bar-pct"></div>
-          </div>`
-          )
-          .join('') + '<div class="bar-total muted small"></div>';
-      el._sig = sig;
-    }
-    for (const r of rows) {
-      const row = el.querySelector(`[data-opt="${r.k}"]`);
-      row.querySelector('.bar-fill').style.width = `${pct(r.n, total)}%`;
-      row.querySelector('.bar-pct').textContent = r.n;
-    }
-    el.querySelector('.bar-total').textContent = unit || '';
-  }
 
-  const SEATS = { exec: '3 to 5', finance: '3 to 5', physician: '4 to 6', nurse: '4 to 6', it: '3 to 5', compliance: '3 to 4', patients: '2 to 4', medcore: '2 to 3', northwind: '2 to 3' };
-  const pkgRows = (tally) =>
-    BALLOT_ORDER.map((id) => ({ k: id, label: id === 'keep' ? 'No deal' : `${PACKAGES[id].letter} · ${PACKAGES[id].name}`, cls: `p${id}`, n: tally.counts[id] }));
-  const letterOf = (id) => (id === 'keep' ? 'no deal' : PACKAGES[id].letter);
-
-  // One row per voting group: how its members split, and which way its block vote goes.
-  function groupPicksHtml(tally) {
-    return VOTING_GROUPS.map((g) => {
-      const c = tally.split[g] || {};
-      const segs = BALLOT_ORDER.map((id) => (c[id] ? `<div class="seg p${id}" style="flex:${c[id]}">${letterOf(id)} ${c[id]}</div>` : '')).join('');
-      const pick = tally.picks[g];
-      return `
-        <div class="role-row">
-          <div class="role-name">${GROUPS[g].icon} ${GROUPS[g].short} <small>${GROUPS[g].votes === 2 ? '2 votes' : '1 vote'}</small></div>
-          <div class="segs">${segs || '<div class="seg none">no position yet</div>'}</div>
-          <div class="pick ${pick ? `p${pick}` : ''}">${pick ? `→ ${letterOf(pick)}` : ''}</div>
-        </div>`;
-    }).join('');
-  }
-
-  function supportBar(icon, label, tagText, weight, tally, extraCls) {
-    const share = pct(weight, tally.present || TOTAL_VOTES);
-    const inn = tally.present && weight >= tally.majority;
-    return `
-      <div class="modbar ${inn ? 'in' : ''} ${extraCls || ''}">
-        <span class="modbar-fill" style="width:${share}%"></span>
-        <span class="modbar-label">${icon} ${esc(label)} <small>${tagText}</small></span>
-        <span class="modbar-pct">${weight}/${tally.present || TOTAL_VOTES}${inn ? ' ✓' : ''}</span>
-      </div>`;
-  }
-
-  function previewHtml(d) {
-    if (d.empty) return '<p class="muted">No positions yet.</p>';
-    const c = d.cost;
-    const t = d.tally;
-    return `
-      <div class="preview p${d.pkg}">
-        <div class="eyebrow">IF THE VOTE WERE HELD NOW</div>
-        <p class="leadline"><b>${esc(pkgTitle(d.pkg))}</b> · ${d.passed ? `passes with ${d.votes} of ${t.present} votes` : d.byExec ? `only ${t.counts[d.pkg]} of ${t.present} votes: the executives would have to decide` : `no deal reaches ${t.need} votes`}</p>
-        ${d.pkg === 'd' ? `<p>Modules bought: <b>${d.modules.length ? d.modules.map((id) => esc(MODULE[id].label)).join(', ') : 'none'}</b>${d.dropped.length ? ` · <span class="dropped">no money left for: ${d.dropped.map((id) => esc(MODULE[id].label)).join(', ')}</span>` : ''}</p>` : ''}
-        ${d.terms.length ? `<p>Terms: ${d.terms.map((id) => esc(TERM[id].label)).join(' · ')}</p>` : ''}
-        ${d.droppedTerms && d.droppedTerms.length ? `<p class="dropped">Over budget, so not bought: ${d.droppedTerms.map((id) => esc(TERM[id].label)).join(' · ')}. Only a stretch signed by finance changes this.</p>` : ''}
-        ${d.pkg === 'keep' ? '' : `<p class="${c.over ? 'overline' : 'underline'}">Contract <b>${money(c.total)}</b> against a ${money(c.cap)} budget: ${c.over ? `${money(c.total - c.cap)} OVER` : `${money(c.cap - c.total)} to spare`}</p>`}
-      </div>`;
-  }
-
-  // Package cards. None is highlighted by default; a card lifts when you hover or focus it.
-  function pkgCards(current) {
-    const critical = inTier(TIERS[0]);
-    const card = (id) => {
-      const pkg = PACKAGES[id];
-      const cov = coverage({ pkg: id, modules: [] });
-      const c = dealCost({ pkg: id });
-      const missed = critical.filter((p) => !cov.full.has(p.id));
-      const risky = /one day/i.test(pkg.style);
-      return `
-        <div class="pkg p${id}" tabindex="0">
-          ${current === id ? '<div class="pitch-tag">NOW PITCHING</div>' : ''}
-          <div class="pkg-head"><span class="pkg-letter p${id}">${pkg.letter}</span><span>${pkg.icon} ${pkg.name}</span></div>
-          <p class="pkg-frame">${esc(pkg.frame)}</p>
-          <p class="pkg-tag">${esc(pkg.stance)}</p>
-          <div class="pkg-stats">
-            <div><small>PRICE</small><b>${money(pkg.price)}${id === 'd' ? '+' : ''}</b></div>
-            <div><small>LEFT OF ${money(CAP)}</small><b>${money(CAP - c.total)}</b></div>
-            <div><small>GO-LIVE</small><b>${pkg.months} mo</b></div>
-          </div>
-          <p class="pkg-switch ${risky ? 'risky' : ''}"><b>How it switches on:</b> ${esc(pkg.style.toLowerCase())}, with ${esc(pkg.training)} of training</p>
-          <p class="pkg-fix"><b>${cov.full.size} of 15</b> problems fixed${cov.partial.size ? `, ${cov.partial.size} partly` : ''}${id === 'd' ? ' (more with modules)' : ''}</p>
-          <ul class="pkg-features">${pkg.includes.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-          <p class="pkg-out"><b>Not included:</b> ${esc(pkg.leaves)}</p>
-          <p class="pkg-catch"><b>The catch:</b> ${esc(pkg.catchline)}</p>
-          <p class="pkg-meta">${esc(pkg.golive)} · ${esc(pkg.hosting)} · old records: ${esc(pkg.records.toLowerCase())}</p>
-          ${missed.length ? `<p class="pkg-miss">Must-fix left open: ${missed.map((p) => esc(p.label)).join(', ')}</p>` : '<p class="pkg-hit">Covers every must-fix problem.</p>'}
-        </div>`;
-    };
-    // Two rival vendors, each with its own pair of packages. The groups sit side by side on wide screens and stack on narrow ones.
-    const group = (seller, icon, line, cls) =>
-      `<div class="vendorgroup"><div class="vendorhead ${cls}">${icon} ${seller.toUpperCase()} <small>${line}</small></div>${PACKAGE_ORDER.filter((id) => PACKAGES[id].seller === seller).map(card).join('')}</div>`;
-    return `<div class="pkgs">${group('MedCore', '⏳', 'the incumbent: the vendor you have today', '')}${group('Northwind', '⚡', 'the challenger: wants to replace them', 'rival')}</div>`;
-  }
+  const groupLabel = (g) => `${GROUPS[g].icon} ${esc(GROUPS[g].short)}`;
 
   const DYN = {
-    count(el, what) {
-      const labels = { reports: 'have logged problems', top: 'have starred their top problems', straw: 'have taken a position', final: 'have voted', reflections: 'feedback forms in' };
-      const of = what === 'reflections' ? S.playerCount : S.voterCount;
-      setHtml(el, `<p class="votedcount"><b>${S.counts[what]}</b> of ${of} ${labels[what]}</p>`);
-    },
-
     pcount(el) {
       const here = S.players.filter((p) => p.connected).length;
       setHtml(el, `👥 ${plural(S.playerCount, 'player')}${here < S.playerCount ? ` (${here} online)` : ''}`);
     },
 
     lobbyhost(el) {
-      const counts = ROLE_ORDER.map(
-        (key) => `<div class="rolecount"><span>${ROLES[key].icon}</span><b>${S.roleCounts[key]}</b><small>${ROLES[key].plural}<br>plan ${SEATS[key]}</small></div>`
-      ).join('');
-      const names = S.players
-        .map(
-          (p) =>
-            `<span class="namechip ${p.connected ? '' : 'away'}">${p.role ? ROLES[p.role].icon : '…'} ${esc(p.name)}<button title="Remove" data-act="kick" data-pub="${p.pub}">✕</button></span>`
-        )
-        .join('');
-      setHtml(
-        el,
-        `<div class="joined"><b>${S.playerCount}</b> player${S.playerCount === 1 ? '' : 's'} joined</div>
-         <div class="rolecounts eight">${counts}</div>
-         <div class="names">${names}</div>`
-      );
+      const counts = ROLE_ORDER.map((key) => `<div class="rolecount"><span>${ROLES[key].icon}</span><b>${S.roleCounts[key]}</b><small>${ROLES[key].short}</small></div>`).join('');
+      const names = S.players.map((p) =>
+        `<span class="namechip ${p.connected ? '' : 'away'}">${p.role ? ROLES[p.role].icon : '…'} ${esc(p.name)}<button title="Remove" data-act="kick" data-pub="${p.pub}">✕</button></span>`).join('');
+      setHtml(el, `<div class="joined"><b>${S.playerCount}</b> player${S.playerCount === 1 ? '' : 's'} joined</div><div class="rolecounts nine">${counts}</div><div class="names">${names}</div>`);
     },
 
     rolepick(el) {
-      setHtml(
-        el,
-        ROLE_ORDER.map((key) => {
-          const r = ROLES[key];
-          return `
+      setHtml(el, Object.keys(GROUPS).map((g) => {
+        const roles = ROLE_ORDER.filter((r) => String(ROLES[r].group) === g);
+        return `<div class="rolegroup"><div class="eyebrow">GROUP ${g} · ${esc(GROUPS[g].name.toUpperCase())}${VOTING_GROUPS.includes(Number(g)) ? '' : ' · NO VOTE'}</div>
+          <div class="rolegrid">${roles.map((key) => `
             <button class="rolepick" data-act="role" data-role="${key}">
-              <span class="rolepick-icon">${r.icon}</span>
-              <span class="rolepick-name">${r.name}</span>
-              <span class="rolepick-text">${esc(r.goal)}</span>
-              <span class="rolepick-count">${S.roleCounts[key]} seated · plan ${SEATS[key]}</span>
+              <span class="rolepick-icon">${ROLES[key].icon}</span>
+              <span class="rolepick-name">${ROLES[key].name}</span>
+              <span class="rolepick-text">${esc(ROLES[key].who)}</span>
+              <span class="rolepick-count">${S.roleCounts[key]} joined</span>
+            </button>`).join('')}</div></div>`;
+      }).join(''));
+    },
+
+    simhost(el) {
+      const { physician, nurse } = S.sim;
+      const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+      setHtml(el, `<div class="stats">
+        ${stat(physician.handled + nurse.handled, 'alerts cleared by the clinicians')}
+        ${stat(physician.overridden + nurse.overridden, 'cleared with one "override all" click')}
+        ${stat(physician.crit.aki ? physician.crit.aki.act : 0, 'physicians acted on the kidney alert')}
+        ${stat(nurse.crit.ews ? nurse.crit.ews.act : 0, 'nurses acted on the EWS 5 alert')}
+      </div>`);
+    },
+
+    quiz(el) {
+      const now = quizNow();
+      const q = now.q;
+      const watcher = S.isHost || !mySimSide();
+      const head = `<div class="qhead"><span>Question ${now.idx + 1} of ${QUIZ.length}</span><span class="qleft" data-qleft>${now.reveal ? '' : `${now.left}s`}</span></div><div class="qtext">${esc(q.q)}</div>`;
+      const reveal = now.reveal ? `
+        <div class="qreveal">
+          <div class="qanswer">${esc(q.answer)}</div>
+          <div class="covers">${q.problems.map((id) => problemChip(id, 'ok')).join('')}</div>
+          ${q.clue && CLUE[q.clue] ? `<p class="small muted">Where it was buried: ${esc(CLUE[q.clue].where)}</p>` : ''}
+        </div>` : '';
+      if (watcher) {
+        const both = (side, label) => `<div><div class="eyebrow">${label}</div>${answerBars(q, quizCounts(q, side), now.reveal)}</div>`;
+        setHtml(el, `${head}<div class="twocol">${both('physician', '🧑‍⚕️ PHYSICIAN SIDE')}${both('nurse', '👩‍⚕️ NURSE SIDE')}</div>${reveal}`);
+        return;
+      }
+      const mine = S.you.quiz[q.id];
+      const opts = `<div class="votes ${q.options.length > 2 ? 'grid' : 'grid'}">${q.options.map((o, i) => `
+        <button class="votebtn ${mine === i ? 'on' : ''} ${now.reveal && q.correct === i ? 'yes on' : ''}" data-act="quiz" data-q="${q.id}" data-n="${i}" ${now.reveal ? 'disabled' : ''}>${esc(o)}</button>`).join('')}</div>`;
+      let verdict = '';
+      if (now.reveal) {
+        const opened = S.you.sim && S.you.sim.chart.clues.includes(q.clue);
+        if (q.correct !== null) verdict = mine == null ? '<p class="muted">No answer.</p>' : mine === q.correct ? '<p class="ok"><b>✓ Right.</b></p>' : '<p class="red"><b>✗ Not quite.</b></p>';
+        verdict += q.clue ? `<p class="small">${opened ? 'You opened this clue during the simulation.' : 'You never opened this clue during the simulation.'}</p>` : '';
+        verdict += `<div class="small muted">Your team:</div>${answerBars(q, quizCounts(q, mySimSide()), true)}`;
+      }
+      setHtml(el, head + opts + reveal + verdict);
+    },
+
+    rank(el) {
+      const mine = S.you.rank;
+      const team = S.problems.teamTop[S.you.role] || [];
+      setHtml(el, `<p class="muted small">${mine.length} of ${RANK_PICKS} ranked. ★ = came up in the quiz.</p><div class="probs">` +
+        PROBLEMS.map((p) => {
+          const pos = mine.indexOf(p.id);
+          return `
+            <button class="prow ${pos >= 0 ? 'on' : ''}" data-act="rank" data-id="${p.id}" ${pos < 0 && mine.length >= RANK_PICKS ? 'disabled' : ''}>
+              <span class="prow-check">${pos >= 0 ? pos + 1 : ''}</span>
+              <span><b>${p.id} · ${esc(p.label)}</b><small>${esc(p.desc)}</small></span>
+              <span class="prow-cat">${QUIZ_PROBLEMS.has(p.id) ? '★' : ''}${team.includes(p.id) ? ` team #${team.indexOf(p.id) + 1}` : ''}</span>
             </button>`;
-        }).join('')
-      );
+        }).join('') + '</div>');
     },
 
-    ehrhost(el) {
-      const total = S.ehr.physician.dismissed + S.ehr.nurse.dismissed;
-      const t = elapsedSec();
-      const phase = t < STORM_START
-        ? '<h1>Ten steps. One minute.</h1><p class="lead">A level to find. A dose to give. A chart to close.</p>'
-        : t < CRASH_AT
-          ? '<h1 class="storm">ALERT STORM</h1><p class="lead">The lab interface is resending results. Every rule is re-firing on all 22 orders.</p>'
-          : '<h1 class="storm">SYSTEM DOWN</h1><p class="lead">The application server ran out of memory. Every workstation on 6 West just froze.</p>';
-      setHtml(el, `${phase}<div class="counter"><b>${total}</b><span>alerts dismissed by the hospital so far</span></div>`);
-    },
-
-    ehrstats(el) {
-      const { physician, nurse } = S.ehr;
-      const secs = (ms) => `${(ms / 1000).toFixed(1)}s`;
-      const parts = [];
-      const stat = (n, text) => parts.push(`<div class="stat"><b>${n}</b><span>${text}</span></div>`);
-      const total = physician.dismissed + nurse.dismissed;
-      if (total) stat(total, 'alerts dismissed by the hospital in under a minute');
-      if (physician.players) stat(`${physician.stepsAvg} of 10`, 'steps the average physician screen finished before the crash');
-      if (nurse.players) stat(`${nurse.stepsAvg} of 10`, 'steps the average nurse screen finished before the crash');
-      if (physician.critSeen) stat(secs(physician.critMedianMs), 'median time the tacrolimus interaction warning stayed on screen');
-      if (nurse.critSeen) stat(secs(nurse.critMedianMs), 'median time the potassium alert stayed on screen');
-      if (nurse.players) stat(nurse.gaveSupp, 'gave a potassium supplement at a potassium of 6.2');
-      const mine = [];
-      const e = !S.isHost && S.you.ehr;
-      if (e) mine.push(`You finished <b class="accent">${e.steps || 0} of 10</b> steps and dismissed <b class="accent">${e.n}</b> alerts.`);
-      if (e && typeof e.critMs === 'number') mine.push(`You dismissed the one that mattered after <b class="accent">${secs(e.critMs)}</b>.`);
-      if (e && e.given.includes('supp')) mine.push('You gave the <b class="red">potassium supplement</b>. His potassium was 6.2, and nothing on the screen stopped you.');
-      if (e && e.given.includes('lact')) mine.push('You gave <b class="red">lactulose</b>, an order carried over from the liver he no longer has.');
-      setHtml(el, (parts.length ? `<div class="stats">${parts.join('')}</div>` : '') + mine.map((m) => `<p class="lead">${m}</p>`).join(''));
-    },
-
-    report(el) {
-      const mine = new Set(S.you.report.problems);
-      setHtml(
-        el,
-        '<div class="probs">' +
-          PROBLEMS.map(
-            (p) => `
-            <button class="prow ${mine.has(p.id) ? 'on' : ''}" data-act="report" data-id="${p.id}">
-              <span class="prow-check">${mine.has(p.id) ? '✓' : ''}</span>
-              <span><b>${p.n}. ${esc(p.label)}</b><small>${esc(p.desc)}</small></span>
-              <span class="prow-cat">${p.cat}</span>
-            </button>`
-          ).join('') +
-          '</div>'
-      );
-    },
-
-    reportbars(el) {
-      const rows = PROBLEMS.map((p) => ({ k: p.id, label: `${p.n}. ${esc(p.label)}`, n: S.problems[p.id].reports }));
-      bars(el, rows, Math.max(1, S.counts.reports));
-    },
-
-    spokes(el) {
-      const name = spokesperson();
-      const mine = !S.isHost && name && S.you.isRep && (S.you.role === 'nurse' || (S.you.role === 'physician' && !S.reps.nurse));
-      const reps = S.isHost
-        ? '<div class="rolecounts eight">' + ROLE_ORDER.map((r) => `<div class="rolecount"><span>${ROLES[r].icon}</span><b class="repname">${esc(S.reps[r] || '-')}</b><small>${ROLES[r].short} rep</small></div>`).join('') + '</div>'
-        : S.you.isRep ? `<div class="repbadge mine">⭐ You are the ${ROLES[S.you.role].short.toLowerCase()} representative. You speak for your table.</div>` : '';
-      setHtml(
-        el,
-        `<div class="repbadge ${mine ? 'mine' : ''}">🎤 Hospital spokesperson: <b>${esc(name || 'choose one now')}</b>${mine ? ' (that is you)' : ''}</div>${reps}`
-      );
-    },
-
-    // Star the three problems that matter most to your group. The ones closest to this seat's
-    // must-haves are listed first with the reason, so the choice is informed, but it stays the player's own.
-    intra(el) {
-      const role = S.you.role;
-      const size = S.roleCounts[role];
-      const mine = new Set(S.you.top);
-      const full = mine.size >= TOP_PICKS;
-      const cares = CARES[role] || [];
-      const why = Object.fromEntries(cares);
-      const row = (p) => {
-        const b = S.problems[p.id];
-        const seen = b.reportsByRole[role] || 0;
-        const on = mine.has(p.id);
-        const detail = why[p.id]
-          ? `<small class="care-why">${esc(why[p.id])}</small>`
-          : `<small>${esc(p.desc)}</small>`;
-        return `
-          <button class="prow star ${on ? 'on' : ''} ${why[p.id] ? 'care' : ''}" data-act="top" data-id="${p.id}" ${!on && full ? 'disabled' : ''}>
-            <span class="prow-check">${on ? '★' : '☆'}</span>
-            <span><b>${p.n}. ${esc(p.label)}</b>${detail}<small>${seen ? `Logged by ${seen} of ${size} ${ROLES[role].plural.toLowerCase()}` : `No ${ROLES[role].short.toLowerCase()} logged this`} · ${b.reports} across the hospital</small></span>
-            <span class="prow-cat">${b.top ? `★ ${b.top}` : ''}</span>
-          </button>`;
+    teamtops(el) {
+      const col = (team, label) => {
+        const ids = S.problems.teamTop[team];
+        return `<div><div class="eyebrow">${label}</div>${ids.length ? `<ol class="topfive">${ids.map((id) => `<li><b>${id} · ${esc(PROBLEM[id].label)}</b></li>`).join('')}</ol>` : '<p class="muted">Ranking…</p>'}</div>`;
       };
-      const careIds = cares.map(([id]) => id);
-      const first = careIds.map((id) => PROBLEM[id]);
-      const rest = PROBLEMS.filter((p) => !careIds.includes(p.id)).sort(
-        (x, y) => (S.problems[y.id].reportsByRole[role] || 0) - (S.problems[x.id].reportsByRole[role] || 0) || x.n - y.n
-      );
-      const suggested = careIds.every((id) => mine.has(id)) && mine.size === careIds.length;
-      setHtml(
-        el,
-        `<p class="muted small">${mine.size} of ${TOP_PICKS} stars used. This is your own choice, made on your own device.</p>
-         <div class="care-head"><span>CLOSEST TO YOUR SEAT'S MUST-HAVES</span>${first.length ? `<button class="btn sm" data-act="topsuggest" ${suggested ? 'disabled' : ''}>${suggested ? 'Starred' : 'Star these three'}</button>` : ''}</div>
-         <div class="probs">${first.map(row).join('')}</div>
-         <div class="care-head rest"><span>EVERYTHING ELSE YOU CAN STAR</span></div>
-         <div class="probs">${rest.map(row).join('')}</div>`
-      );
+      setHtml(el, `<div class="split">${col('physician', '🧑‍⚕️ PHYSICIAN TEAM')}${col('nurse', '👩‍⚕️ NURSE TEAM')}</div>`);
     },
 
-    // Vendors, Phase 2: every problem, how much the hospital cares, and which package answers it.
-    sellmap(el) {
-      const fixers = (p) =>
-        PACKAGE_ORDER.map((id) => {
-          const cov = coverage({ pkg: id, modules: [] });
-          return cov.full.has(p.id) ? `<span class="pkg-letter p${id}">${PACKAGES[id].letter}</span>` : '';
-        }).join('') + MODULES.filter((m) => m.fixes.includes(p.id)).map((m) => `<span class="pchip">${m.icon} ${esc(m.label)}</span>`).join('');
-      setHtml(
-        el,
-        '<div class="eyebrow">WHAT THE HOSPITAL CARES ABOUT, AND WHAT YOU SELL FOR IT</div><div class="probs">' +
-          byRank()
-            .map((p) => {
-              const b = S.problems[p.id];
-              const who = ROLE_ORDER.filter((r) => b.topByRole[r]).map((r) => ROLES[r].icon).join(' ');
-              return `<div class="prow static"><span class="prow-check">★${b.top}</span><span><b>${p.n}. ${esc(p.label)}</b><small>Starred by: ${who || 'nobody yet'}</small></span><span class="fixers">${fixers(p)}</span></div>`;
-            })
-            .join('') +
-          '</div>'
-      );
-    },
-
-    // Three columns. Drag a card to another column, or tap a card and then tap a column.
-    board(el) {
-      const canMove = boardMovable();
-      const card = (p) => {
-        const b = S.problems[p.id];
-        const icons = ROLE_ORDER.filter((r) => b.topByRole[r]).map((r) => ROLES[r].icon).join(' ');
-        const inner = `<div><b>${p.n}. ${esc(p.label)}</b><small>${esc(p.desc)}</small><span class="pcard-meta">★ ${b.top} ${icons}</span></div>`;
-        return canMove
-          ? `<div class="pcard movable ${picked === p.id ? 'picked' : ''}" draggable="true" data-act="pickcard" data-id="${p.id}" role="button" tabindex="0">${ic('grip-vertical', 'grip')}${inner}</div>`
-          : `<div class="pcard">${inner}</div>`;
-      };
-      setHtml(
-        el,
-        (canMove ? `<p class="dndhint">${ic('arrows-move')} ${picked ? `Now tap the column for <b>${esc(PROBLEM[picked].label)}</b>.` : 'Drag a card to another column. On a phone, tap a card, then tap a column.'}</p>` : '') +
-          `<div class="board ${canMove ? 'movable' : ''} ${picked ? 'picking' : ''}">` +
-          TIERS.map((tier) => {
-            const items = inTier(tier);
-            return `<div class="tiercol ${tier.k}" data-tier="${tier.k}" ${canMove ? 'data-act="dropcol"' : ''}><div class="tiercol-head">${tier.label} <span>${items.length}</span></div><div class="tiercol-hint">${tier.hint}</div>${items.map(card).join('')}</div>`;
-          }).join('') +
-          '</div>'
-      );
-    },
-
-    others(el) {
-      setHtml(
-        el,
-        S.others.length
-          ? `<div class="eyebrow">ALSO WRITTEN IN</div><div class="names">${S.others.map((o) => `<span class="namechip plain">${ROLES[o.role].icon} ${esc(o.text)}</span>`).join('')}</div>`
-          : ''
-      );
-    },
-
-    // The room board: private facts and vendor offers that a team chose to publish.
-    shared(el) {
-      setHtml(
-        el,
-        S.shared.length
-          ? `<div class="roomboard"><div class="eyebrow">📣 THE ROOM NOW KNOWS</div>${S.shared
-              .map((s) => {
-                const sec = SECRET[s.id];
-                return `<div class="roomfact ${sec.unlocks ? 'offer' : ''}"><span class="roomfact-who">${ROLES[s.role].icon} ${ROLES[s.role].plural}</span><span>${sec.unlocks ? '<b>OFFER ON THE TABLE:</b> ' : ''}${esc(sec.text)}</span></div>`;
-              })
-              .join('')}</div>`
-          : S.isHost ? '<p class="muted small">📣 Nothing has been published to the room yet. Each team holds private facts it can choose to reveal.</p>' : ''
-      );
-    },
-
-    critical(el) {
-      setHtml(
-        el,
-        `<div class="critlist"><div class="eyebrow">${esc(HOSPITAL.toUpperCase())}: MUST FIX</div>` +
-          inTier(TIERS[0]).map((p, i) => `<div class="critrow" style="animation-delay:${0.6 + i * 0.35}s"><b>${i + 1}.</b> ${esc(p.label)}<small>${esc(p.desc)}</small></div>`).join('') +
-          `<p class="muted small">Plus ${inTier(TIERS[1]).length} should-fix and ${inTier(TIERS[2]).length} can-wait problems.</p></div>`
-      );
-    },
-
-    packages(el) {
-      setHtml(el, pkgCards(null));
-    },
-    pitchpackages(el) {
-      setHtml(el, pkgCards(PACKAGE_ORDER[pitchIndex()]));
-    },
-    pitchnow(el) {
-      const id = PACKAGE_ORDER[pitchIndex()];
-      const key = `now:${id}`;
-      if (el._key === key) return;
-      el._key = key;
-      el.innerHTML = `<div class="pitchnow p${id}"><span class="pkg-letter p${id}">${PACKAGES[id].letter}</span> <b>${PACKAGES[id].name}</b> · ${esc(PACKAGES[id].seller)} has the floor · <span class="subtimer" data-subtimer></span> <small>pitch ${pitchIndex() + 1} of 4, one minute each</small></div>`;
-    },
-    pitchcue(el) {
-      const id = PACKAGE_ORDER[pitchIndex()];
-      const pkg = PACKAGES[id];
-      const mine = SELLERS[pkg.seller] === S.you.role;
-      setHtml(
-        el,
-        mine
-          ? `<div class="eyebrow">YOUR CUE CARD: YOU HAVE THE FLOOR</div>${pitchCue(id)}`
-          : `<div class="cue p${id}"><div class="cue-head"><span class="pkg-letter p${id}">${pkg.letter}</span> Your rival, ${esc(pkg.seller)}, is pitching</div><p>${esc(ROLES[S.you.role].brief[id])}</p><p class="muted small">Listen for what they leave out. You cannot interrupt. Use it in Phase 4.</p></div>`
-      );
-    },
-
-    menu(el) {
-      setHtml(
-        el,
-        `<table class="gtable"><tr><th>Module</th><th>Price</th><th>What it solves</th><th>Wanted by</th></tr>
-          ${MODULES.map((m) => `<tr><td>${m.icon} <b>${esc(m.label)}</b></td><td class="num">${money(m.price)}</td><td>${esc(m.solves)}</td><td>${ROLES[m.role].icon} ${ROLES[m.role].plural}</td></tr>`).join('')}
-          <tr class="total"><td>All eight</td><td class="num">${money(MODULES.reduce((s, m) => s + m.price, 0))}</td><td colspan="2">Package D leaves ${money(CAP - dealCost({ pkg: 'd' }).total)} of the budget for modules.</td></tr>
-        </table>`
-      );
-    },
-
-    // Price against the cap. The costs that arrive after signing appear only once finance or IT publishes them.
-    costs(el) {
-      const showAfter = isShared('fi_after');
-      const showB = isShared('it_bhidden');
-      const row = (id) => {
-        const pkg = PACKAGES[id];
-        const c = dealCost({ pkg: id });
-        const after = showAfter ? pkg.lost + pkg.old + (showB && pkg.hidden ? pkg.hidden : 0) : showB && pkg.hidden ? pkg.hidden : 0;
-        return `<tr><td><span class="pkg-letter p${id}">${pkg.letter}</span> ${pkg.name}${id === 'd' ? ', before modules' : ''}</td><td>${esc(pkg.seller)}: ${esc(pkg.frame.toLowerCase())}</td><td class="num"><b>${money(c.total)}</b></td><td class="num good">${money(CAP - c.total)}</td>
-          ${showAfter || showB ? `<td class="num ${after ? 'bad' : ''}">${after ? `+${money(after)}` : ''}</td>` : ''}</tr>`;
-      };
-      setHtml(
-        el,
-        `<table class="gtable"><tr><th>Package</th><th>Vendor and pitch</th><th>Price</th><th>Left of ${money(CAP)}</th>${showAfter || showB ? '<th>After signing</th>' : ''}</tr>
-          ${PACKAGE_ORDER.map(row).join('')}</table>
-         <p class="muted small">$ millions, five-year totals. ${showAfter ? `After signing: lost revenue at go-live and running the old system during the switch. The cash reserve covers ${money(RESERVE)} of lost revenue.` : 'Prices are what is on the vendor\'s sheet.'}</p>`
-      );
-    },
-
-    matrix(el) {
-      const cell = (p, id) => {
-        const cov = coverage({ pkg: id, modules: [] });
-        if (cov.full.has(p.id)) return '<td class="good">Yes</td>';
-        const mod = id === 'd' ? MODULES.find((m) => m.fixes.includes(p.id)) : null;
-        if (mod) return `<td class="warn">${cov.partial.has(p.id) ? 'Partly; ' : ''}with ${esc(mod.label.toLowerCase())}</td>`;
-        return cov.partial.has(p.id) ? '<td class="warn">Partly</td>' : '<td class="bad">No</td>';
-      };
-      setHtml(
-        el,
-        `<table class="gtable"><tr><th>#</th><th>Problem</th>${PACKAGE_ORDER.map((id) => `<th><span class="pkg-letter p${id}">${PACKAGES[id].letter}</span></th>`).join('')}</tr>
-          ${PROBLEMS.map((p) => `<tr><td class="num">${p.n}</td><td>${esc(p.label)}</td>${PACKAGE_ORDER.map((id) => cell(p, id)).join('')}</tr>`).join('')}</table>`
-      );
-    },
-
-    secrets(el) {
-      setHtml(el, secretsHtml(S.you.role));
-    },
-
-    // Package choice, Package D modules, and the contract terms this player wants.
-    ballot(el, kind) {
-      const mine = S.you[kind] || { pkg: null, modules: [], terms: [] };
-      const team = (S.straw.tally.split[S.you.group]) || {};
-      const pkgs = BALLOT_ORDER.map((id) => {
-        const pkg = PACKAGES[id];
-        const teamCount = kind === 'straw' && team[id] ? `<span class="pkgbtn-team">team: ${team[id]}</span>` : '';
-        const c = dealCost({ pkg: id });
-        return `
-          <button class="pkgbtn p${id} ${mine.pkg === id ? 'on' : ''}" data-act="pkg" data-kind="${kind}" data-pkg="${id}">
-            <span class="pkg-letter p${id}">${pkg.letter}</span>
-            <span class="pkgbtn-name">${pkg.icon} ${pkg.name}<small>${id === 'keep' ? 'Sign nothing. The old EHR costs $4.2M a year.' : `${money(c.total)}${id === 'd' ? ' + modules' : ''} · ${pkg.frame} · ${pkg.golive}`}</small></span>
-            ${teamCount}
-          </button>`;
+    merged(el) {
+      const { board, teamTop, merged, top5 } = S.problems;
+      const rows = merged.map((id) => {
+        const tags = [teamTop.physician.includes(id) ? '🧑‍⚕️' : '', teamTop.nurse.includes(id) ? '👩‍⚕️' : ''].join('');
+        const pin = S.topOverride[id] === 'in' ? ' 📌' : S.topOverride[id] === 'out' ? ' ⛔' : '';
+        return `<button class="pcard ${top5.includes(id) ? 'intop' : ''}" data-act="top" data-id="${id}"><b>${id} · ${esc(PROBLEM[id].label)}${pin}</b><span class="pcard-meta">${tags || '—'} · ★ ${board[id].stars}</span></button>`;
       }).join('');
-      let mods = '';
-      if (mine.pkg === 'd') {
-        const free = mine.terms.includes('reference') ? 'governance' : null;
-        mods =
-          '<div class="eyebrow">MODULES YOU WANT BOUGHT</div><div class="probs">' +
-          MODULES.map((m) => {
-            const on = mine.modules.includes(m.id);
-            return `
-              <button class="prow ${on ? 'on' : ''}" data-act="module" data-kind="${kind}" data-mod="${m.id}">
-                <span class="prow-check">${on ? '✓' : ''}</span>
-                <span><b>${m.icon} ${esc(m.label)}</b><small>${esc(m.solves)}</small></span>
-                <span class="prow-cat">${free === m.id ? 'FREE' : `+${money(m.price)}`}</span>
-              </button>`;
-          }).join('') +
-          '</div>';
-      }
-      let terms = '';
-      if (mine.pkg && mine.pkg !== 'keep') {
-        const offered = TERMS.filter((t) => termOffered(t) && t.applies.includes(mine.pkg));
-        const locked = TERMS.filter((t) => !termOffered(t) && t.applies.includes(mine.pkg)).length;
-        terms =
-          '<div class="eyebrow">CONTRACT TERMS YOU WANT</div><div class="probs">' +
-          offered
-            .map((t) => {
-              const on = mine.terms.includes(t.id);
-              const tags = [t.cost ? `+${money(t.cost)}` : '', t.discount ? `−${t.discount * 100}% base` : '', t.freeModule ? 'free module' : ''].filter(Boolean).join(' · ');
-              return `
-                <button class="prow ${on ? 'on' : ''}" data-act="term" data-kind="${kind}" data-term="${t.id}">
-                  <span class="prow-check">${on ? '✓' : ''}</span>
-                  <span><b>${esc(t.label)}</b><small>${esc(t.desc)}</small></span>
-                  <span class="prow-cat">${tags}</span>
-                </button>`;
-            })
-            .join('') +
-          `</div>${locked ? `<p class="muted small">🔒 ${plural(locked, 'more term')} could exist for this package. Vendors only put an offer on the table when someone asks for it.</p>` : ''}`;
-      }
-      let sum = '';
-      if (mine.pkg && mine.pkg !== 'keep') {
-        const c = dealCost(mine);
-        sum = `<div class="mydeal ${c.over ? 'over' : 'under'}">YOUR DEAL: <b>${money(c.total)}</b> against a ${money(c.cap)} budget · ${c.over ? `${money(c.total - c.cap)} OVER` : `${money(c.cap - c.total)} to spare`}</div>`;
-      }
-      setHtml(
-        el,
-        `<div class="pkgbtns">${pkgs}</div>${mods}${terms}${sum}
-         ${kind === 'final' ? `<p class="votedcount">${mine.pkg ? `Your vote: <b>${esc(pkgTitle(mine.pkg))}</b>. You can change it until time runs out.` : 'You have not voted yet.'}</p>` : ''}`
-      );
+      const missing = (S.problems.missing || []).map((t) => `<p class="red small"><b>${t === 'physician' ? 'Physician' : 'Nurse'} team ranking missing:</b> not submitted. The list uses the other team's ranking.</p>`).join('');
+      setHtml(el, `${missing}<div class="mergedlist">${rows}</div>`);
     },
 
-    strawboard(el) {
-      const d = S.straw;
-      const t = d.tally;
-      if (!el._built) {
-        el.innerHTML = `
-          <div class="split three">
-            <div><div class="eyebrow">WHERE THE ${TOTAL_VOTES} VOTES STAND · ${PASS} NEEDED</div><div data-part="bars"></div><div data-part="roles"></div></div>
-            <div><div class="eyebrow">PACKAGE D MODULES · VOTES BEHIND EACH</div><div data-part="mods"></div></div>
-            <div><div class="eyebrow">CONTRACT TERMS ON THE TABLE</div><div data-part="terms"></div></div>
-          </div>
-          <div data-part="preview"></div>`;
-        el._built = true;
-      }
-      bars(el.querySelector('[data-part=bars]'), pkgRows(t), t.present || TOTAL_VOTES, `${t.present} of ${TOTAL_VOTES} votes placed`);
-      setHtml(el.querySelector('[data-part=roles]'), groupPicksHtml(t));
-      setHtml(el.querySelector('[data-part=mods]'), MODULES.map((m) => supportBar(m.icon, m.label, money(m.price), t.modules[m.id], t)).join('') + '<p class="muted small">✓ = wanted by groups holding a majority of votes. Bought in order of support until the cap is hit.</p>');
-      const offered = TERMS.filter(termOffered);
-      const locked = TERMS.length - offered.length;
-      setHtml(
-        el.querySelector('[data-part=terms]'),
-        offered.map((x) => supportBar(ROLES[x.role].icon, x.label, x.cost ? `+${money(x.cost)}` : '', t.terms[x.id], t)).join('') +
-          (locked ? `<p class="muted small">🔒 ${plural(locked, 'vendor offer')} not yet on the table.</p>` : '')
-      );
-      setHtml(el.querySelector('[data-part=preview]'), previewHtml(d));
+    top5(el) {
+      const p = S.problems;
+      const status = p.locked ? '<p class="ok"><b>🔒 Confirmed.</b> This list goes to the vendor.</p>'
+        : !S.isHost && S.you.role === 'exec' && S.step === 'p3_discuss' ? '<button class="btn primary" data-act="confirm-top">CONFIRM THE TOP FIVE</button> <span class="small muted">Only the CEO can confirm. It locks the list.</span>'
+        : S.step === 'p3_discuss' ? '<p class="small muted">The CEO confirms the list. If time runs out, the current top five locks automatically.</p>' : '';
+      setHtml(el, topFiveList() + status);
     },
 
-    finalboard(el) {
-      const t = S.decision.tally;
-      if (!el._built) {
-        el.innerHTML = `
-          <div class="split">
-            <div><div class="eyebrow">THE VOTE · ${PASS} OF ${TOTAL_VOTES} NEEDED</div><div data-part="bars"></div></div>
-            <div><div class="eyebrow">BY GROUP</div><div data-part="roles"></div></div>
+    lightning(el) {
+      const asked = new Map(S.questions.map((q) => [q.group, q]));
+      const list = S.questions.length
+        ? `<ol class="qlist">${S.questions.map((q) => `<li>${groupLabel(q.group)}${q.pkg ? ` → <b>${q.pkg}</b>` : ''}: ${esc(q.text)}</li>`).join('')}</ol>`
+        : '<p class="small muted">No lightning questions yet.</p>';
+      let form = '';
+      if (!S.isHost && myGroup() !== 5) {
+        const mine = asked.get(myGroup());
+        form = mine
+          ? `<p class="small">Your group asked: <i>${esc(mine.text)}</i></p>`
+          : `<div class="askform"><input data-question name="question" maxlength="300" placeholder="Your group's one lightning question">
+              <select data-question-pkg name="question-pkg"><option value="">Any package</option>${PACKAGE_ORDER.map((l) => `<option value="${l}">${l}. ${esc(PACKAGES[l].name)}</option>`).join('')}</select>
+              <button class="btn small" data-act="ask">ASK</button></div><p class="small muted">One question per group.</p>`;
+      }
+      setHtml(el, `<div class="taskcard"><div class="eyebrow">LIGHTNING QUESTIONS · ONE PER GROUP</div>${form}${list}</div>`);
+    },
+
+    vendorqa(el) {
+      const vendor = !S.isHost && myGroup() === 5;
+      const items = S.vendorQs.map((q) => `
+        <li><b>${groupLabel(q.group)}:</b> ${esc(q.text)}
+          ${q.answer ? `<div class="ok">Vendor: ${esc(q.answer)}</div>`
+            : vendor ? `<div class="askform"><input data-answer="${q.id}" name="answer-${q.id}" maxlength="400" placeholder="Your answer"><button class="btn small" data-act="answer" data-id="${q.id}">ANSWER</button></div>`
+            : '<div class="small muted">Waiting for the vendor…</div>'}</li>`).join('');
+      const form = !S.isHost && !vendor ? '<div class="askform"><input data-vq name="vq" maxlength="300" placeholder="Ask the vendor a question"><button class="btn small" data-act="vq">SEND</button></div>' : '';
+      setHtml(el, `<div class="taskcard"><div class="eyebrow">QUESTIONS FOR THE VENDOR</div>${form}${items ? `<ol class="qlist">${items}</ol>` : '<p class="small muted">No questions yet.</p>'}</div>`);
+    },
+
+    stars(el) {
+      const mine = new Set(S.you.stars);
+      const { board, teamTop, merged } = S.problems;
+      setHtml(el, `<p class="muted small">${mine.size} of 5 stars used. Sorted by the clinicians' merged ranking.</p><div class="probs">` +
+        merged.map((id) => {
+          const p = PROBLEM[id];
+          const on = mine.has(id);
+          const tags = [teamTop.physician.includes(id) ? '🧑‍⚕️' : '', teamTop.nurse.includes(id) ? '👩‍⚕️' : ''].join('');
+          return `
+            <button class="prow star ${on ? 'on' : ''}" data-act="star" data-id="${id}" ${!on && mine.size >= 5 ? 'disabled' : ''}>
+              <span class="prow-check">${on ? '★' : '☆'}</span>
+              <span><b>${id} · ${esc(p.label)}</b><small>${esc(p.desc)}</small></span>
+              <span class="prow-cat">${tags} ★${board[id].stars}</span>
+            </button>`;
+        }).join('') + '</div>');
+    },
+
+    pkcards(el) {
+      const vendor = !S.isHost && S.you.role === 'vendor';
+      setHtml(el, `<div class="pkcards">${PACKAGE_ORDER.map((l) => packageCard(l, { catches: vendor, host: S.isHost })).join('')}</div>`);
+    },
+
+    pick(el, slot) {
+      const current = slot === 'vote' ? S.you.vote : S.you.picks[slot];
+      setHtml(el, picker(slot, current));
+    },
+
+    myteam(el) {
+      const g = S.groups[myGroup()];
+      const rows = (tally) => Object.entries(tally).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<li><b>${esc(choiceShort(k))}</b> — ${n}</li>`).join('') || '<li class="muted">No picks yet</li>';
+      setHtml(el, `
+        <div class="taskcard"><p>Group first choice: <b>${g.first ? esc(choiceTitle(g.first)) : '—'}</b><br>Group second choice: <b>${g.second ? esc(choiceTitle(g.second)) : '—'}</b></p>
+          <div class="twocol"><div><div class="eyebrow">FIRST CHOICES</div><ul>${rows(g.firstTally)}</ul></div><div><div class="eyebrow">SECOND CHOICES</div><ul>${rows(g.secondTally)}</ul></div></div>
+          ${S.reps[myGroup()] ? `<p class="small muted">Spokesperson: ⭐ ${esc(S.reps[myGroup()])}</p>` : ''}</div>`);
+    },
+
+    groupboard(el) {
+      const rows = VOTING_GROUPS.map((g) => {
+        const x = S.groups[g];
+        const cell = (k) => (k ? `<b>${esc(choiceShort(k))}</b> <small>${money(C.choiceCost(k))}</small>` : '<span class="muted">—</span>');
+        return `<tr><td>${groupLabel(g)}</td><td>${cell(x.first)}</td><td>${cell(x.second)}</td><td>${x.members}</td></tr>`;
+      }).join('');
+      setHtml(el, `<table class="combos"><tr><th>Group</th><th>First choice</th><th>Second choice</th><th>Members</th></tr>${rows}</table>`);
+    },
+
+    voteprogress(el) {
+      setHtml(el, `<div class="rolecounts six">${VOTING_GROUPS.map((g) => `<div class="rolecount"><span>${GROUPS[g].icon}</span><b>${S.groups[g].voted}/${S.groups[g].members}</b><small>${esc(GROUPS[g].short)}</small></div>`).join('')}</div>`);
+    },
+
+    decision(el) {
+      const d = S.decision;
+      const { groupVotes, ranking } = S.results;
+      const role = S.isHost ? null : S.you.role;
+      const can = (who) => S.isHost || role === who;
+      const votes = VOTING_GROUPS.map((g) => `<div class="rolecount"><span>${GROUPS[g].icon}</span><b class="repname">${groupVotes[g] ? esc(choiceShort(groupVotes[g])) : '—'}</b><small>${esc(GROUPS[g].short)}</small></div>`).join('');
+      const place = (i) => (i === 0 ? 'Winner' : i === 1 ? 'Runner-up' : `${i + 1}`);
+      const rank = ranking.map((r, i) => `<tr class="${r.key === d.current ? 'cur' : ''}"><td>${place(i)}</td><td><b>${esc(choiceTitle(r.key))}</b></td><td>${r.groups}</td><td>${r.people}</td><td class="${r.cost > BUDGET ? 'red' : ''}">${money(r.cost)}</td></tr>`).join('');
+      const tie = S.results.tie;
+      const tieHtml = tie ? `<div class="taskcard tie"><b>Tie:</b> ${tie.keys.map((k) => esc(choiceShort(k))).join(' and ')} have ${tie.groups} group votes each. <b>Tie rule: the CFO breaks the tie.</b>
+          ${tie.broken ? ` The CFO chose ${esc(choiceShort(tie.broken))}.` : ' Until the CFO decides, the choice with more individual votes, then the cheaper one, leads; signing it off breaks the tie in its favor.'}
+          ${!d.final && can('finance') ? tie.keys.filter((k) => k !== d.current).map((k) => ` <button class="btn small" data-act="tiebreak" data-key="${k}">BREAK THE TIE FOR ${esc(choiceShort(k))}</button>`).join('') : ''}</div>` : '';
+      let action = '';
+      if (d.final) {
+        action = `
+          <div class="winner pk-${C.choiceLetters(d.final)[0]}">
+            <div class="eyebrow">THE HOSPITAL HAS DECIDED</div>
+            <h1>${esc(choiceTitle(d.final))}</h1>
+            <p>${money(C.choiceCost(d.final))} · fixes problems ${C.choiceFixes(d.final).join(', ')}${d.cfo === 'phased' ? ' · <b>phased contract</b>' : ''}${d.nogo ? ' · the runner-up, after a no-go' : ''}</p>
+            <p class="lead">${!S.isHost && role === 'exec' ? '<b>Announce it to the vendor.</b>' : 'The CEO announces the decision to the vendor.'}</p>
+            ${S.isHost ? '<button class="btn danger small" data-act="reset-decision">Reset decision (logged)</button>' : ''}
           </div>`;
-        el._built = true;
+      } else if (!d.current) {
+        action = '<p class="lead">No votes were cast.</p>';
+      } else {
+        const over = C.choiceCost(d.current) > BUDGET;
+        const cfoDone = d.cfo ? `<p class="ok">✓ CFO signed off${d.cfo === 'phased' ? ' as a phased contract' : ': fits the $12M budget'}.</p>` : '';
+        const cfoBtns = !d.cfo && can('finance')
+          ? `<button class="btn primary" data-act="decide" data-op="cfo_ok">${over ? 'APPROVE AS A PHASED CONTRACT' : 'SIGN OFF: FITS THE BUDGET'}</button>${over ? ' <button class="btn danger" data-act="decide" data-op="cfo_reject">REJECT: OVER BUDGET → RUNNER-UP</button>' : ''}`
+          : !d.cfo ? '<p class="muted">Waiting for the CFO to confirm the budget…</p>' : '';
+        const ceoBtns = d.cfo && can('exec')
+          ? `<button class="btn primary" data-act="decide" data-op="go">GO</button> <button class="btn danger" data-act="decide" data-op="nogo">NO-GO → RUNNER-UP</button>`
+          : d.cfo ? '<p class="muted">Waiting for the CEO and board: go or no-go…</p>' : '';
+        action = `<div class="taskcard"><div class="eyebrow">ON THE TABLE</div><h2>${esc(choiceTitle(d.current))}</h2><p>${choiceSummary(d.current)}</p>${cfoDone}${cfoBtns}${ceoBtns}</div>`;
       }
-      bars(el.querySelector('[data-part=bars]'), pkgRows(t), t.present || TOTAL_VOTES, `${t.present} of ${TOTAL_VOTES} votes cast`);
-      setHtml(el.querySelector('[data-part=roles]'), groupPicksHtml(t));
+      setHtml(el, `
+        <div class="eyebrow">ONE VOTE PER GROUP</div><div class="rolecounts six">${votes}</div>
+        ${tieHtml}
+        <div class="split"><div><table class="combos"><tr><th>Place</th><th>Choice</th><th>Group votes</th><th>People</th><th>Cost</th></tr>${rank || '<tr><td colspan="5">No votes</td></tr>'}</table></div><div>${action}</div></div>`);
     },
 
-    // Projector controls for the replay: which screen, and which system (the room's choice is starred).
-    simswitch(el) {
-      const chosen = S.decision.pkg;
-      const cur = hostSim.pkg || chosen;
-      const side = (k, label) => `<button class="btn sm ${hostSim.side === k ? 'primary' : ''}" data-act="simside" data-v="${k}">${label}</button>`;
-      const pk = (id) => `<button class="btn sm ${cur === id ? 'primary' : ''}" data-act="simpkg" data-v="${id}">${id === 'keep' ? 'No deal' : `${PACKAGES[id].letter} · ${PACKAGES[id].name}`}${id === chosen ? ' ★' : ''}</button>`;
-      setHtml(
-        el,
-        `<div class="simswitch"><span class="eyebrow">SCREEN</span>${side('physician', 'Physician')}${side('nurse', 'Nurse')}
-           <span class="eyebrow">SYSTEM</span>${BALLOT_ORDER.map(pk).join('')}</div>
-         <p class="muted small">★ is what the room bought. The other buttons show the same minute under each alternative${chosen === 'd' ? '' : ' (Package D is shown without modules)'}.</p>`
-      );
-    },
-    hostsim(el) {
-      const key = `${hostSim.side}:${hostSim.pkg || S.decision.pkg}`;
-      if (el._key === key) return;
-      el._key = key;
-      el.innerHTML = iconize(simScreen(hostSim.side, true));
-      startSim(hostSim.side, true);
+    replay(el) {
+      setHtml(el, replayHtml(S.isHost));
     },
 
-    // Executives and clinicians are prompted to ask finance to stretch the budget.
-    // Finance is prompted to agree only when the request stands up.
-    stretchcue(el) {
-      const group = S.you.group;
-      if (!['exec', 'clinical', 'finance'].includes(group)) return setHtml(el, '');
-      const d = S.straw;
-      const t = d.tally;
-      const backers = t.termGroups.stretch || [];
-      const financeIn = backers.includes('finance');
-      const leftOut = d.empty ? [] : [...(d.droppedTerms || []).map((id) => TERM[id].label), ...d.dropped.map((id) => MODULE[id].label)];
-      const status = `<p class="cue-status ${financeIn ? 'yes' : 'no'}">${financeIn ? '✅ Finance is currently agreeing to the stretch.' : '❌ Finance has not agreed to a stretch.'}</p>`;
-      if (group !== 'finance') {
-        const pitch = group === 'exec'
-          ? 'Offer finance something back: a vendor penalty clause, a refund, a credit, or a waived fee.'
-          : S.you.role === 'nurse'
-            ? 'Bring a number: three nurses have left 6 West, and each costs $60,000 to replace.'
-            : 'Bring a number: every physician loses about 2 hours a night to the EHR, and 96% of alerts are overridden.';
-        return setHtml(
-          el,
-          `<div class="cuecard ask"><div class="cuecard-head">💰 YOUR CUE: ASK FINANCE TO STRETCH THE BUDGET</div>
-             <p>${leftOut.length ? `The room wants more than ${money(CAP)} buys. <b>Left out for lack of money: ${leftOut.map(esc).join(', ')}.</b>` : `If what you need does not fit in ${money(CAP)}, the board allows ${money(STRETCH_CAP)}, but only if finance signs for it.`}</p>
-             <ol><li>Tick <b>"Stretch the budget to ${money(STRETCH_CAP)}"</b> on your ballot. That is your request.</li><li>Go to the finance table and say exactly what the extra money buys.</li><li>${pitch}</li></ol>
-             ${status}</div>`
-        );
-      }
-      const askers = backers.filter((g) => g !== 'finance').map((g) => GROUPS[g].short);
-      const pkg = d.empty ? null : PACKAGES[d.pkg];
-      const want = d.empty ? null : dealCost({ pkg: d.pkg, modules: [...d.modules, ...d.dropped], terms: [...d.terms, ...(d.droppedTerms || [])].filter((id) => id !== 'stretch') });
-      const extra = want ? want.total - CAP : 0;
-      const gives = d.empty ? [] : d.terms.filter((id) => ['penalty', 'penaltyb', 'refund', 'exitfee', 'credit', 'medcorefee'].includes(id));
-      const check = (ok, text) => `<li class="${ok ? 'yes' : 'no'}">${ok ? '✅' : '❌'} ${text}</li>`;
-      setHtml(
-        el,
-        `<div class="cuecard grant"><div class="cuecard-head">💰 YOUR CUE: STRETCH THE BUDGET ONLY IF IT MAKES SENSE</div>
-           <p>${askers.length ? `<b>${askers.join(' and ')}</b> ${askers.length === 1 ? 'is' : 'are'} asking you to raise the budget from ${money(CAP)} to ${money(STRETCH_CAP)}.` : 'Nobody has asked you to stretch the budget yet. Executives and clinicians have been told they can.'}</p>
-           ${d.empty ? '<p class="muted">The room has no position yet.</p>' : `<ul class="cue-checks">
-             ${check(extra > 0, extra > 0 ? `The stretch buys something real: the room's deal is ${money(extra)} over budget${leftOut.length ? ` for ${leftOut.map(esc).join(', ')}` : ''}.` : `Everything the room wants already fits in ${money(CAP)}. A stretch would buy nothing.`)}
-             ${check(pkg.lost <= RESERVE, `Lost revenue at go-live (${money(pkg.lost)}) is ${pkg.lost <= RESERVE ? 'within' : 'above'} your ${money(RESERVE)} reserve.`)}
-             ${check(gives.length > 0, gives.length ? `The vendor has given something back: ${gives.map((id) => esc(TERM[id].label)).join('; ')}.` : 'The vendor has given nothing back yet. Ask for a penalty clause, a refund, a credit, or a waived fee.')}
-             ${check(want.after <= 10, `Another ${money(want.after)} arrives after signing that is not in the contract.`)}
-           </ul>`}
-           <p>Doing nothing costs about $4.2M a year. A fix that prevents that can pay for itself.</p>
-           <p><b>To accept:</b> tick "Stretch the budget to ${money(STRETCH_CAP)}" on your ballot. It counts only if at least half of finance ticks it. <b>To refuse:</b> leave it unticked and tell them what would change your mind.</p>
-           ${status}</div>`
-      );
-    },
-
-    fixedpick(el) {
-      const opts = [['yes', '✅ Yes'], ['partly', '◐ Partly'], ['no', '❌ No']];
-      setHtml(el, '<div class="rating">' + opts.map(([k, label]) => `<button class="${reflectDraft.fixed === k ? 'on' : ''}" data-act="fixedpick" data-v="${k}">${label}</button>`).join('') + '</div>');
-    },
-
-    reflections(el) {
-      const all = S.reflections;
-      const n = (k) => all.filter((r) => r.fixed === k).length;
-      const worst = {};
-      for (const r of all) if (r.worst) worst[r.worst] = (worst[r.worst] || 0) + 1;
-      const top = Object.entries(worst).sort((a, b) => b[1] - a[1])[0];
-      const quote = (label, text) => (text ? `<p><small>${label}</small>${esc(text)}</p>` : '');
-      setHtml(
-        el,
-        `<div class="stats">
-           <div class="stat"><b>${n('yes')} · ${n('partly')} · ${n('no')}</b><span>yes · partly · no: "did the deal fix what you cared about?"</span></div>
-           ${top ? `<div class="stat"><b>#${PROBLEM[top[0]].n}</b><span>felt worst: ${esc(PROBLEM[top[0]].label)}</span></div>` : ''}
-         </div>
-         <div class="reflist">${all
-           .filter((r) => r.surprised || r.gaveup || r.learned)
-           .map((r) => `<div class="refcard"><div class="refcard-head">${ROLES[r.role].icon} ${ROLES[r.role].short}</div>${quote('SURPRISED BY', r.surprised)}${quote('GAVE UP', r.gaveup)}${quote('NOW UNDERSTANDS', r.learned)}</div>`)
-           .join('')}</div>`
-      );
+    wrap(el) {
+      const key = finalChoice();
+      const fixed = new Set(key ? C.choiceFixes(key) : []);
+      const left = PROBLEMS.filter((p) => !fixed.has(p.id));
+      setHtml(el, `
+        <p class="lead">${key ? `The hospital bought <b>${esc(choiceTitle(key))}</b> for ${money(C.choiceCost(key))}.` : 'The hospital bought nothing this cycle.'}</p>
+        <div class="split">
+          <div><div class="eyebrow">FIXED THIS CYCLE (${fixed.size})</div><div class="covers">${[...fixed].map((id) => problemChip(id, 'ok')).join('') || '<span class="muted">None</span>'}</div></div>
+          <div><div class="eyebrow">CARRIED OVER TO THE NEXT VENDOR CYCLE (${left.length})</div><div class="covers">${left.map((p) => problemChip(p.id, p.id === 13 ? 'no13' : '')).join('')}</div>
+            <p class="small muted">No package fixes problem 13, poor interface design, so it always carries over.</p></div>
+        </div>`);
     },
   };
 
@@ -2250,30 +1704,26 @@
   function render() {
     if (!S) return;
     const needsRole = !S.isHost && (!S.you.role || (repick && S.step === 'lobby'));
-    const key = S.isHost ? `H:${S.step}` : `P:${needsRole ? 'pick' : S.step}:${S.you.role || ''}`;
+    loadBriefs();
+    const key = S.isHost ? `H:${S.step}:${S.paused}` : `P:${needsRole ? 'pick' : S.step}`;
 
     if (key !== screenKey) {
       screenKey = key;
-      ehrStop();
-      hostSim.pkg = null;
+      quizKey = null;
+      simStop();
       const body = needsRole
         ? `<div class="center">
-             <h1>Choose your seat, ${esc(S.you.name)}</h1>
-             <p class="muted">Seven groups. Nurses and physicians are two tables of one group. MedCore and Northwind are rival vendors.</p>
-             <button class="btn primary big" data-act="role" data-role="random">🎲 Assign me randomly</button>
-             <p class="muted small">Random assignment follows the seat plan, so every group fills evenly.</p>
-             <div class="rolegrid" data-dyn="rolepick"></div>
+             <h1>Choose your role, ${esc(S.you.name)}</h1>
+             <p class="muted">Several people can share a role. Physicians and nurses play the bed 14 simulation.</p>
+             <div data-dyn="rolepick"></div>
+             <button class="btn" data-act="role" data-role="random">🎲 Assign me randomly</button>
            </div>`
         : stage();
-      const wide = !S.isHost && !needsRole && (S.step === 'p1_ehr' || S.step === 'p6_sim');
+      const wide = !S.isHost && !needsRole && S.step === 'p1_sim' && mySimSide();
       document.body.className = [S.isHost ? 'host' : 'player', `step-${S.step}`, wide ? 'ehr-mode' : '', online ? '' : 'offline'].join(' ');
       app.innerHTML = iconize(`${topbar()}${S.isHost ? procedure() : ''}<main class="stage">${body}</main>${S.isHost ? hostbar() : ''}`);
       window.scrollTo(0, 0);
-      if (!S.isHost && !needsRole) {
-        const side = mySide();
-        if (S.step === 'p1_ehr') startSim(side, false);
-        if (S.step === 'p6_sim') startSim(side, true);
-      }
+      if (wide) simStart(mySimSide());
     }
 
     document.querySelectorAll('[data-dyn]').forEach((el) => {
@@ -2285,15 +1735,41 @@
 
   // ---------- events ----------
 
-  let otherTimer = null;
-  // Read the text box directly: a state push may have replaced S since the last keystroke.
-  function sendReport() {
-    const input = document.querySelector('[data-other]');
-    return act('report', { problems: S.you.report.problems, other: input ? input.value : S.you.report.other });
+  const toggle = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  function pick(slot, letter) {
+    const current = slot === 'vote' ? S.you.vote : S.you.picks[slot];
+    let letters = C.choiceLetters(current);
+    if (letters.includes(letter)) letters = letters.filter((l) => l !== letter);
+    else if (letters.length >= 2) return toast('Choose at most two packages.');
+    else letters = [...letters, letter];
+    const key = C.normalizeChoice(letters);
+    if (slot === 'vote') {
+      S.you.vote = key;
+      render();
+      return key ? act('vote', { choice: key }) : null;
+    }
+    S.you.picks = { ...S.you.picks, [slot]: key };
+    render();
+    return act('picks', S.you.picks);
   }
 
-  function toggle(items, id) {
-    return items.includes(id) ? items.filter((x) => x !== id) : [...items, id];
+  function simMar(id, op) {
+    const med = DUE.find((m) => m.id === id);
+    if (!med || sim.chart.mar[id]) return;
+    if (op === 'hold') sim.chart.mar[id] = 'held';
+    else if (op === 'scan' && med.fail && !sim.open[`fail:${id}`]) sim.open[`fail:${id}`] = true;
+    else sim.chart.mar[id] = 'given';
+    refresh();
+    simSave();
+  }
+
+  function simFlow(form) {
+    const inputs = [...document.querySelectorAll(`[data-flow="${form}"]`)];
+    if (inputs.some((i) => !i.value.trim())) return toast('Required fields are missing.');
+    if (!sim.chart.flow.includes(form)) sim.chart.flow.push(form);
+    refresh();
+    simSave();
   }
 
   document.addEventListener('click', async (e) => {
@@ -2325,7 +1801,7 @@
         }
         return;
       case 'resume-host':
-        return startSession(store.get(localStorage, 'fth_host'));
+        return startSession(store.get(localStorage, 'b14_host'));
       case 'leave':
         if (confirm('Leave this room? You will not be able to host it again from this browser.')) leave();
         return;
@@ -2333,104 +1809,114 @@
         repick = false;
         return act('role', { role: el.dataset.role });
       case 'rerole':
-        // Dropping back to the picker is local; the server keeps the old seat until a new one is chosen.
         repick = true;
         return render();
-      case 'shuffle':
-        if (S.playerCount && confirm('Deal every player a new random seat from the seat plan?')) act('shuffle');
-        return;
-      case 'dismiss':
-        return ehrDismiss(el);
-      case 'simrow':
-        return simClick('row', Number(el.dataset.i));
-      case 'simnext':
-        return simClick('next');
-      case 'simalert': {
-        const layer = document.getElementById('ehr-alert');
-        if (layer) layer.classList.remove('show');
-        sim.clicks++;
-        return renderSim();
+
+      // Phase 1
+      case 'sim-tab':
+        return sim.down || showTab(el.dataset.tab);
+      case 'sim-alert':
+        return alertAction(el.dataset.a);
+      case 'sim-open':
+        return toggleOpen(el.dataset.key, el.dataset.clues);
+      case 'sim-notes':
+        sim.notesTab = el.dataset.sub;
+        return refresh();
+      case 'sim-fax':
+        sim.fax = Math.min(FAX_PAGES, Math.max(1, sim.fax + Number(el.dataset.d)));
+        return refresh();
+      case 'sim-tx':
+        sim.tx++;
+        return refresh();
+      case 'sim-mar':
+        return simMar(el.dataset.med, el.dataset.op);
+      case 'sim-flow':
+        return simFlow(el.dataset.form);
+      case 'sim-assess':
+        sim.assessDone.add(el.dataset.name);
+        sim.chart.assess = sim.assessDone.size;
+        refresh();
+        return simSave();
+      case 'sim-reply':
+        return reply(el.dataset.id, Number(el.dataset.n));
+      case 'sim-dec':
+        return decide(el.dataset.id, el.dataset.opt);
+      case 'sim-side':
+        return sideTab(el.dataset.side);
+      case 'finding-add':
+        return addFinding();
+      case 'sim-sign': {
+        const msg = document.querySelector('[data-signfail]');
+        if (msg) msg.textContent = "Signing failed: orders won't sign while MedChart is down.";
+        return toast("Orders won't sign: MedChart is not responding.");
       }
-      case 'simside':
-        hostSim.side = el.dataset.v;
-        return render();
-      case 'simpkg':
-        hostSim.pkg = el.dataset.v;
-        return render();
-      case 'report':
-        S.you.report.problems = toggle(S.you.report.problems, el.dataset.id);
+
+      // Phase 2
+      case 'quiz':
+        S.you.quiz[el.dataset.q] = Number(el.dataset.n);
+        DYN.quiz(document.querySelector('[data-dyn="quiz"]'));
+        return act('quiz', { q: el.dataset.q, n: Number(el.dataset.n) });
+      case 'rank':
+        S.you.rank = toggle(S.you.rank, Number(el.dataset.id)).slice(0, RANK_PICKS);
         render();
-        return sendReport();
-      case 'topsuggest':
-        S.you.top = (CARES[S.you.role] || []).map(([id]) => id).slice(0, TOP_PICKS);
+        return act('rank', { ids: S.you.rank });
+
+      // Phase 3
+      case 'star':
+        S.you.stars = toggle(S.you.stars, Number(el.dataset.id)).slice(0, 5);
         render();
-        return act('top', { problems: S.you.top });
+        return act('stars', { ids: S.you.stars });
       case 'top':
-        S.you.top = toggle(S.you.top, el.dataset.id).slice(0, TOP_PICKS);
-        render();
-        return act('top', { problems: S.you.top });
-      case 'pickcard':
-        picked = picked === el.dataset.id ? null : el.dataset.id;
-        return render();
-      case 'dropcol':
-        if (picked) moveCard(picked, el.dataset.tier);
-        return;
-      case 'share':
-        if (confirm('Publish this to the whole room? It goes on the big screen and you cannot take it back.')) act('share', { secret: el.dataset.id });
-        return;
-      case 'pkg':
-      case 'module':
-      case 'term': {
-        const kind = el.dataset.kind;
-        const mine = S.you[kind] || { pkg: null, modules: [], terms: [] };
-        if (a === 'pkg') {
-          mine.pkg = el.dataset.pkg;
-          if (mine.pkg !== 'd') mine.modules = [];
-          mine.terms = mine.terms.filter((id) => TERM[id].applies.includes(mine.pkg));
-        } else if (!mine.pkg) return toast('Choose a package first.');
-        else if (a === 'module') mine.modules = toggle(mine.modules, el.dataset.mod);
-        else mine.terms = toggle(mine.terms, el.dataset.term);
-        S.you[kind] = mine;
-        render();
-        return act('ballot', { kind, pkg: mine.pkg, modules: mine.modules, terms: mine.terms });
-      }
-      case 'fixedpick':
-        reflectDraft.fixed = el.dataset.v;
-        render();
-        return saveReflection(0);
-      case 'export':
-        return exportCsv();
-      case 'howto': {
-        const old = document.querySelector('.modal');
-        if (old) old.remove();
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.dataset.act = 'closemodal';
-        modal.innerHTML = iconize(`<div class="modal-box wide">${howToPlay()}<button class="btn" data-act="closemodal">Close</button></div>`);
-        document.body.appendChild(modal);
+        return S.isHost ? act('top', { id: Number(el.dataset.id) }) : null;
+
+      // Phases 4 and 5
+      case 'catch':
+        return act('catch', { pkg: el.dataset.pkg });
+      case 'confirm-top':
+        return act('confirm_top');
+      case 'ask': {
+        const text = document.querySelector('[data-question]');
+        const pkg = document.querySelector('[data-question-pkg]');
+        if (!text || !text.value.trim()) return toast('Write your question first.');
+        const res = await act('question', { text: text.value, pkg: pkg ? pkg.value : '' });
+        if (res) text.value = '';
         return;
       }
-      case 'showrole': {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.dataset.act = 'closemodal';
-        modal.innerHTML = `<div class="modal-box wide">${roleCard(S.you.role)}${S.phase >= 2 ? secretsHtml(S.you.role) : ''}${S.phase >= 3 ? packageLines(S.you.role) : ''}<button class="btn" data-act="closemodal">Close</button></div>`;
-        modal.innerHTML = iconize(modal.innerHTML);
-        document.body.appendChild(modal);
+      case 'vq': {
+        const text = document.querySelector('[data-vq]');
+        if (!text || !text.value.trim()) return toast('Write your question first.');
+        const res = await act('vendor_question', { text: text.value });
+        if (res) text.value = '';
         return;
       }
+      case 'answer': {
+        const text = document.querySelector(`[data-answer="${el.dataset.id}"]`);
+        if (!text || !text.value.trim()) return toast('Write your answer first.');
+        return act('vendor_answer', { id: Number(el.dataset.id), text: text.value });
+      }
+      case 'tiebreak':
+        return act('decide', { op: 'tiebreak', key: el.dataset.key });
+      case 'reset-decision':
+        if (confirm('Reset the decision? The reset is logged.')) act('reset_decision');
+        return;
+      case 'dashboard':
+        return openModal(dashboardHtml());
+      case 'pause':
+      case 'resume':
+        return act(a);
+      case 'pick':
+        return pick(el.dataset.slot, el.dataset.pkg);
+      case 'decide':
+        return act('decide', { op: el.dataset.op });
+
+      case 'showrole':
+        return openModal(myBriefs(S.phase >= 3));
       case 'closemodal':
-        if (e.target === el) {
-          const modal = document.querySelector('.modal');
-          if (modal) modal.remove();
-        }
+        if (e.target === el) document.querySelector('.modal')?.remove();
         return;
       case 'next':
       case 'back':
         return act(a);
-      case 'end':
-        if (confirm('Skip ahead to the debrief on every screen?')) act('end');
-        return;
       case 'timer-add':
         return act('timer', { op: 'add' });
       case 'timer-restart':
@@ -2485,26 +1971,30 @@
     }
   });
 
-  function onReflectInput(e) {
-    if (!e.target.matches('[data-reflect]')) return;
-    reflectDraft[e.target.dataset.reflect] = e.target.value || (e.target.tagName === 'SELECT' ? null : '');
-    const note = document.getElementById('reflect-saved');
-    if (note) note.textContent = 'Saving…';
-    saveReflection(e.target.tagName === 'SELECT' ? 0 : 500);
-  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('[data-test=finding-text], [data-test=finding-screen]')) {
+      e.preventDefault();
+      addFinding();
+    }
+  });
 
   document.addEventListener('input', (e) => {
-    if (e.target.matches('[data-other]')) {
-      S.you.report.other = e.target.value;
-      clearTimeout(otherTimer);
-      otherTimer = setTimeout(sendReport, 400);
+    if (!sim.active) return;
+    const t = e.target;
+    if (t.matches('[data-simnotes]')) {
+      sim.chart.notes = t.value;
+      simSave();
+    } else if (t.matches('[data-simdec]')) {
+      sim.chart.decisions[t.dataset.simdec] = t.value;
+      simSave();
+    } else if (t.matches('[data-flow]')) {
+      sim.flowVals[t.dataset.flow] = { ...sim.flowVals[t.dataset.flow], [t.dataset.field]: t.value };
     }
-    onReflectInput(e);
   });
 
   // ---------- boot ----------
 
-  session = store.get(sessionStorage, 'fth_session');
+  session = store.get(sessionStorage, 'b14_session');
   if (session && session.code) connect();
   else renderHome();
 })();
