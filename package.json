@@ -1,10 +1,11 @@
 {
   "name": "fix-the-hospital",
   "version": "1.0.0",
-  "description": "Multiplayer classroom simulation: decide whether, and how, to deploy an AI system at Penn General.",
+  "description": "Multiplayer classroom simulation: seven stakeholder groups replace a failing EHR at Riverbend University Hospital.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/smoke.js && node test/stretch.js"
   },
   "engines": {
     "node": ">=18"
